@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="id" class="dark">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+    <meta name="theme-color" content="#060608" />
+    <meta name="application-name" content="COINOVA" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="COINOVA" />
+    <title>COINOVA - Cyber Reward Arena</title>
+    <meta name="description" content="Platform reward interaktif COINOVA: kumpulkan Koin COINOVA, dapatkan Diamond, selesaikan misi harian, undang teman, dan tarik saldo ke E-Wallet." />
+    <meta property="og:title" content="COINOVA - Cyber Reward Arena" />
+    <meta property="og:description" content="Platform reward interaktif COINOVA: kumpulkan Koin COINOVA, dapatkan Diamond, selesaikan misi harian, undang teman, dan tarik saldo ke E-Wallet." />
+    <meta property="og:type" content="website" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <link rel="icon" type="image/svg+xml" href="/icon.svg" />
+    <link rel="alternate icon" href="/favicon.ico" />
+    <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@500;600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Poppins:wght@500;600;700;800&display=swap" rel="stylesheet" />
+  </head>
+  <body class="bg-[#060608] text-white antialiased selection:bg-[#FFEA00]/30 selection:text-[#FFEA00]">
+    <div id="root"></div>
+    <script>
+      (function () {
+        var origError = console.error;
+        console.error = function () {
+          if (
+            arguments.length > 0 &&
+            typeof arguments[0] === 'string' &&
+            arguments[0].indexOf('[vite]') !== -1
+          ) {
+            return;
+          }
+          return origError.apply(console, arguments);
+        };
+      })();
+    </script>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

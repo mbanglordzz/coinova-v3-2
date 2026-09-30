@@ -1,0 +1,804 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // 1. GLOBAL SAFETY NET (Default-Deny Catch-All)
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // =========================================================================
+    // PRIMITIVE HELPERS
+    // =========================================================================
+
+    function isValidId(id) {
+      return id is string && id.size() >= 1 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isVerifiedUser() {
+      return isSignedIn() && request.auth.token.email_verified == true;
+    }
+
+    function isOwner(userId) {
+      return isVerifiedUser() && request.auth.uid == userId;
+    }
+
+    function isAdmin() {
+      return isVerifiedUser() && (
+        request.auth.token.email == 'lordzmbang08@gmail.com' ||
+        exists(/databases/$(database)/documents/admins/$(request.auth.uid))
+      );
+    }
+
+    function userExists(uid) {
+      return exists(/databases/$(database)/documents/users/$(uid));
+    }
+
+    // =========================================================================
+    // VALIDATION BLUEPRINTS (Anti-Update-Gap Helpers)
+    // =========================================================================
+
+    function isValidAdminRole(data) {
+      return data.keys().hasAll(['uid', 'email', 'createdAt']) &&
+        data.keys().hasOnly(['uid', 'email', 'createdAt']) &&
+        data.uid is string && data.uid.size() >= 1 && data.uid.size() <= 128 && data.uid.matches('^[a-zA-Z0-9_\\-]+$') &&
+        data.email is string && data.email.size() >= 3 && data.email.size() <= 256 &&
+        data.createdAt is timestamp;
+    }
+
+    function isValidUser(data) {
+      return data.keys().hasAll([
+          'uid', 'username', 'referralCode', 'dragonLevel', 'totalTaps',
+          'dailyStreak', 'lastCheckInDate', 'role', 'status', 'createdAt', 'updatedAt'
+        ]) &&
+        data.keys().hasOnly([
+          'uid', 'username', 'avatarUrl', 'referralCode', 'referredByUid',
+          'referredByCode', 'dragonLevel', 'totalTaps', 'dailyStreak',
+          'lastCheckInDate', 'role', 'status', 'createdAt', 'updatedAt'
+        ]) &&
+        data.uid is string && data.uid.size() >= 1 && data.uid.size() <= 128 && data.uid.matches('^[a-zA-Z0-9_\\-]+$') &&
+        data.username is string && data.username.size() >= 2 && data.username.size() <= 40 &&
+        (!('avatarUrl' in data) || (data.avatarUrl is string && data.avatarUrl.size() <= 500)) &&
+        data.referralCode is string && data.referralCode.size() >= 4 && data.referralCode.size() <= 24 && data.referralCode.matches('^[a-zA-Z0-9_\\-]+$') &&
+        (!('referredByUid' in data) || (data.referredByUid is string && data.referredByUid.size() <= 128)) &&
+        (!('referredByCode' in data) || (data.referredByCode is string && data.referredByCode.size() <= 24)) &&
+        data.dragonLevel is int && data.dragonLevel >= 1 && data.dragonLevel <= 100 &&
+        data.totalTaps is int && data.totalTaps >= 0 &&
+        data.dailyStreak is int && data.dailyStreak >= 0 && data.dailyStreak <= 3650 &&
+        data.lastCheckInDate is string && data.lastCheckInDate.size() >= 1 && data.lastCheckInDate.size() <= 16 &&
+        data.role is string && (data.role == 'player' || data.role == 'admin') &&
+        data.status is string && (data.status == 'active' || data.status == 'suspended') &&
+        data.createdAt is timestamp &&
+        data.updatedAt is timestamp;
+    }
+
+    function isValidProfile(data) {
+      return data.keys().hasAll([
+          'uid', 'email', 'fullName', 'phone', 'defaultEwallet',
+          'ewalletNumber', 'ewalletAccountName', 'pinHash', 'notificationsEnabled', 'updatedAt'
+        ]) &&
+        data.keys().hasOnly([
+          'uid', 'email', 'fullName', 'phone', 'defaultEwallet',
+          'ewalletNumber', 'ewalletAccountName', 'pinHash', 'notificationsEnabled', 'updatedAt'
+        ]) &&
+        data.uid is string && data.uid.size() >= 1 && data.uid.size() <= 128 && data.uid.matches('^[a-zA-Z0-9_\\-]+$') &&
+        data.email is string && data.email.size() >= 3 && data.email.size() <= 256 &&
+        data.fullName is string && data.fullName.size() <= 80 &&
+        data.phone is string && data.phone.size() <= 24 &&
+        data.defaultEwallet is string && (
+          data.defaultEwallet == 'DANA' ||
+          data.defaultEwallet == 'GoPay' ||
+          data.defaultEwallet == 'OVO' ||
+          data.defaultEwallet == 'ShopeePay'
+        ) &&
+        data.ewalletNumber is string && data.ewalletNumber.size() <= 24 &&
+        data.ewalletAccountName is string && data.ewalletAccountName.size() <= 80 &&
+        data.pinHash is string && data.pinHash.size() <= 128 &&
+        data.notificationsEnabled is bool &&
+        data.updatedAt is timestamp;
+    }
+
+    function isValidWallet(data) {
+      return data.keys().hasAll([
+          'uid', 'coinBalance', 'fireBalance', 'idrBalance', 'lockedIdrBalance',
+          'energy', 'maxEnergy', 'totalEarnedCoins', 'totalEarnedFire', 'totalWithdrawnIdr', 'updatedAt'
+        ]) &&
+        data.keys().hasOnly([
+          'uid', 'coinBalance', 'fireBalance', 'idrBalance', 'lockedIdrBalance',
+          'energy', 'maxEnergy', 'totalEarnedCoins', 'totalEarnedFire', 'totalWithdrawnIdr', 'updatedAt'
+        ]) &&
+        data.uid is string && data.uid.size() >= 1 && data.uid.size() <= 128 && data.uid.matches('^[a-zA-Z0-9_\\-]+$') &&
+        data.coinBalance is int && data.coinBalance >= 0 &&
+        data.fireBalance is int && data.fireBalance >= 0 &&
+        data.idrBalance is int && data.idrBalance >= 0 &&
+        data.lockedIdrBalance is int && data.lockedIdrBalance >= 0 &&
+        data.energy is int && data.energy >= 0 && data.energy <= 100000 &&
+        data.maxEnergy is int && data.maxEnergy >= 100 && data.maxEnergy <= 100000 &&
+        data.totalEarnedCoins is int && data.totalEarnedCoins >= 0 &&
+        data.totalEarnedFire is int && data.totalEarnedFire >= 0 &&
+        data.totalWithdrawnIdr is int && data.totalWithdrawnIdr >= 0 &&
+        data.updatedAt is timestamp;
+    }
+
+    function isValidWalletTransaction(data) {
+      return data.keys().hasAll([
+          'uid', 'category', 'direction', 'currency', 'amount', 'description', 'referenceId', 'createdAt'
+        ]) &&
+        data.keys().hasOnly([
+          'uid', 'category', 'direction', 'currency', 'amount', 'description', 'referenceId', 'createdAt'
+        ]) &&
+        data.uid is string && data.uid.size() >= 1 && data.uid.size() <= 128 && data.uid.matches('^[a-zA-Z0-9_\\-]+$') &&
+        data.category is string && (
+          data.category == 'PENDAPATAN' ||
+          data.category == 'TASK' ||
+          data.category == 'REFERRAL' ||
+          data.category == 'REWARD' ||
+          data.category == 'LEVEL' ||
+          data.category == 'WITHDRAWAL' ||
+          data.category == 'ADMIN'
+        ) &&
+        data.direction is string && (
+          data.direction == 'CREDIT' ||
+          data.direction == 'DEBIT' ||
+          data.direction == 'HOLD' ||
+          data.direction == 'REFUND'
+        ) &&
+        data.currency is string && (
+          data.currency == 'COIN' ||
+          data.currency == 'FIRE' ||
+          data.currency == 'IDR'
+        ) &&
+        data.amount is int && data.amount >= 0 &&
+        data.description is string && data.description.size() >= 2 && data.description.size() <= 200 &&
+        data.referenceId is string && data.referenceId.size() >= 1 && data.referenceId.size() <= 128 &&
+        data.createdAt is timestamp;
+    }
+
+    function isValidTask(data) {
+      return data.keys().hasAll([
+          'taskId', 'title', 'description', 'category', 'targetCount',
+          'metricType', 'coinReward', 'fireReward', 'idrReward', 'isActive', 'updatedAt'
+        ]) &&
+        data.keys().hasOnly([
+          'taskId', 'title', 'description', 'category', 'targetCount',
+          'metricType', 'coinReward', 'fireReward', 'idrReward', 'isActive', 'updatedAt'
+        ]) &&
+        data.taskId is string && data.taskId.size() >= 1 && data.taskId.size() <= 128 && data.taskId.matches('^[a-zA-Z0-9_\\-]+$') &&
+        data.title is string && data.title.size() >= 2 && data.title.size() <= 100 &&
+        data.description is string && data.description.size() >= 2 && data.description.size() <= 240 &&
+        data.category is string && (
+          data.category == 'DAILY' ||
+          data.category == 'BEGINNER' ||
+          data.category == 'SPECIAL' ||
+          data.category == 'REFERRAL' ||
+          data.category == 'CREATOR'
+        ) &&
+        data.targetCount is int && data.targetCount >= 1 &&
+        data.metricType is string && (
+          data.metricType == 'TAPS' ||
+          data.metricType == 'CHECKIN' ||
+          data.metricType == 'LEVEL' ||
+          data.metricType == 'INVITES' ||
+          data.metricType == 'COINS_EARNED' ||
+          data.metricType == 'CREATOR_POST' ||
+          data.metricType == 'SHARE'
+        ) &&
+        data.coinReward is int && data.coinReward >= 0 &&
+        data.fireReward is int && data.fireReward >= 0 &&
+        data.idrReward is int && data.idrReward >= 0 &&
+        data.isActive is bool &&
+        data.updatedAt is timestamp;
+    }
+
+    function isValidTaskClaim(data) {
+      return data.keys().hasAll([
+          'claimId', 'uid', 'taskId', 'taskTitle', 'coinReward', 'fireReward', 'idrReward', 'claimedAt'
+        ]) &&
+        data.keys().hasOnly([
+          'claimId', 'uid', 'taskId', 'taskTitle', 'coinReward', 'fireReward', 'idrReward', 'claimedAt'
+        ]) &&
+        data.claimId is string && data.claimId.size() >= 1 && data.claimId.size() <= 128 && data.claimId.matches('^[a-zA-Z0-9_\\-]+$') &&
+        data.uid is string && data.uid.size() >= 1 && data.uid.size() <= 128 && data.uid.matches('^[a-zA-Z0-9_\\-]+$') &&
+        data.taskId is string && data.taskId.size() >= 1 && data.taskId.size() <= 128 && data.taskId.matches('^[a-zA-Z0-9_\\-]+$') &&
+        data.taskTitle is string && data.taskTitle.size() >= 1 && data.taskTitle.size() <= 100 &&
+        data.coinReward is int && data.coinReward >= 0 &&
+        data.fireReward is int && data.fireReward >= 0 &&
+        data.idrReward is int && data.idrReward >= 0 &&
+        data.claimedAt is timestamp;
+    }
+
+    function isValidRewardCode(data) {
+      return data.keys().hasAll([
+          'code', 'description', 'coinReward', 'fireReward', 'idrReward',
+          'maxClaims', 'claimedCount', 'isActive', 'updatedAt'
+        ]) &&
+        data.keys().hasOnly([
+          'code', 'description', 'coinReward', 'fireReward', 'idrReward',
+          'maxClaims', 'claimedCount', 'isActive', 'updatedAt'
+        ]) &&
+        data.code is string && data.code.size() >= 3 && data.code.size() <= 32 && data.code.matches('^[a-zA-Z0-9_\\-]+$') &&
+        data.description is string && data.description.size() <= 160 &&
+        data.coinReward is int && data.coinReward >= 0 &&
+        data.fireReward is int && data.fireReward >= 0 &&
+        data.idrReward is int && data.idrReward >= 0 &&
+        data.maxClaims is int && data.maxClaims >= 1 &&
+        data.claimedCount is int && data.claimedCount >= 0 && data.claimedCount <= data.maxClaims &&
+        data.isActive is bool &&
+        data.updatedAt is timestamp;
+    }
+
+    function isValidRewardCodeClaim(data) {
+      return data.keys().hasAll([
+          'claimId', 'uid', 'code', 'coinReward', 'fireReward', 'idrReward', 'claimedAt'
+        ]) &&
+        data.keys().hasOnly([
+          'claimId', 'uid', 'code', 'coinReward', 'fireReward', 'idrReward', 'claimedAt'
+        ]) &&
+        data.claimId is string && data.claimId.size() >= 1 && data.claimId.size() <= 128 && data.claimId.matches('^[a-zA-Z0-9_\\-]+$') &&
+        data.uid is string && data.uid.size() >= 1 && data.uid.size() <= 128 && data.uid.matches('^[a-zA-Z0-9_\\-]+$') &&
+        data.code is string && data.code.size() >= 3 && data.code.size() <= 32 && data.code.matches('^[a-zA-Z0-9_\\-]+$') &&
+        data.coinReward is int && data.coinReward >= 0 &&
+        data.fireReward is int && data.fireReward >= 0 &&
+        data.idrReward is int && data.idrReward >= 0 &&
+        data.claimedAt is timestamp;
+    }
+
+    function isValidReferral(data) {
+      return data.keys().hasAll([
+          'referralId', 'inviterUid', 'inviteeUid', 'inviteeUsername',
+          'status', 'rewardCoin', 'rewardFire', 'rewardIdr', 'createdAt', 'updatedAt'
+        ]) &&
+        data.keys().hasOnly([
+          'referralId', 'inviterUid', 'inviteeUid', 'inviteeUsername',
+          'status', 'rewardCoin', 'rewardFire', 'rewardIdr', 'createdAt', 'updatedAt'
+        ]) &&
+        data.referralId is string && data.referralId.size() >= 1 && data.referralId.size() <= 128 && data.referralId.matches('^[a-zA-Z0-9_\\-]+$') &&
+        data.inviterUid is string && data.inviterUid.size() >= 1 && data.inviterUid.size() <= 128 && data.inviterUid.matches('^[a-zA-Z0-9_\\-]+$') &&
+        data.inviteeUid is string && data.inviteeUid.size() >= 1 && data.inviteeUid.size() <= 128 && data.inviteeUid.matches('^[a-zA-Z0-9_\\-]+$') &&
+        data.inviterUid != data.inviteeUid &&
+        data.inviteeUsername is string && data.inviteeUsername.size() >= 2 && data.inviteeUsername.size() <= 40 &&
+        data.status is string && (data.status == 'PENDING' || data.status == 'VERIFIED') &&
+        data.rewardCoin is int && data.rewardCoin >= 0 &&
+        data.rewardFire is int && data.rewardFire >= 0 &&
+        data.rewardIdr is int && data.rewardIdr >= 0 &&
+        data.createdAt is timestamp &&
+        data.updatedAt is timestamp;
+    }
+
+    function isValidCreatorSubmission(data) {
+      return data.keys().hasAll([
+          'submissionId', 'uid', 'username', 'platform', 'contentUrl', 'caption',
+          'status', 'rewardCoin', 'rewardFire', 'rewardIdr', 'adminNote', 'createdAt', 'updatedAt'
+        ]) &&
+        data.keys().hasOnly([
+          'submissionId', 'uid', 'username', 'platform', 'contentUrl', 'caption',
+          'status', 'rewardCoin', 'rewardFire', 'rewardIdr', 'adminNote', 'createdAt', 'updatedAt'
+        ]) &&
+        data.submissionId is string && data.submissionId.size() >= 1 && data.submissionId.size() <= 128 && data.submissionId.matches('^[a-zA-Z0-9_\\-]+$') &&
+        data.uid is string && data.uid.size() >= 1 && data.uid.size() <= 128 && data.uid.matches('^[a-zA-Z0-9_\\-]+$') &&
+        data.username is string && data.username.size() >= 2 && data.username.size() <= 40 &&
+        data.platform is string && (
+          data.platform == 'TikTok' ||
+          data.platform == 'YouTube' ||
+          data.platform == 'Instagram' ||
+          data.platform == 'Facebook'
+        ) &&
+        data.contentUrl is string && data.contentUrl.size() >= 8 && data.contentUrl.size() <= 400 &&
+        data.caption is string && data.caption.size() <= 240 &&
+        data.status is string && (
+          data.status == 'PENDING' ||
+          data.status == 'APPROVED' ||
+          data.status == 'REJECTED'
+        ) &&
+        data.rewardCoin is int && data.rewardCoin >= 0 &&
+        data.rewardFire is int && data.rewardFire >= 0 &&
+        data.rewardIdr is int && data.rewardIdr >= 0 &&
+        data.adminNote is string && data.adminNote.size() <= 240 &&
+        data.createdAt is timestamp &&
+        data.updatedAt is timestamp;
+    }
+
+    function isValidWithdrawal(data) {
+      return data.keys().hasAll([
+          'withdrawalId', 'uid', 'username', 'method', 'accountNumber', 'accountName',
+          'amount', 'status', 'paymentReference', 'adminNote', 'createdAt', 'updatedAt'
+        ]) &&
+        data.keys().hasOnly([
+          'withdrawalId', 'uid', 'username', 'method', 'accountNumber', 'accountName',
+          'amount', 'status', 'paymentReference', 'adminNote', 'createdAt', 'updatedAt'
+        ]) &&
+        data.withdrawalId is string && data.withdrawalId.size() >= 1 && data.withdrawalId.size() <= 128 && data.withdrawalId.matches('^[a-zA-Z0-9_\\-]+$') &&
+        data.uid is string && data.uid.size() >= 1 && data.uid.size() <= 128 && data.uid.matches('^[a-zA-Z0-9_\\-]+$') &&
+        data.username is string && data.username.size() >= 2 && data.username.size() <= 40 &&
+        data.method is string && (
+          data.method == 'DANA' ||
+          data.method == 'GoPay' ||
+          data.method == 'OVO' ||
+          data.method == 'ShopeePay'
+        ) &&
+        data.accountNumber is string && data.accountNumber.size() >= 8 && data.accountNumber.size() <= 24 &&
+        data.accountName is string && data.accountName.size() >= 2 && data.accountName.size() <= 80 &&
+        data.amount is int && (
+          data.amount == 50000 ||
+          data.amount == 100000 ||
+          data.amount == 200000 ||
+          data.amount == 500000
+        ) &&
+        data.status is string && (
+          data.status == 'PENDING' ||
+          data.status == 'PROCESSING' ||
+          data.status == 'PAID' ||
+          data.status == 'REJECTED'
+        ) &&
+        data.paymentReference is string && data.paymentReference.size() >= 1 && data.paymentReference.size() <= 160 &&
+        data.adminNote is string && data.adminNote.size() >= 1 && data.adminNote.size() <= 240 &&
+        data.createdAt is timestamp &&
+        data.updatedAt is timestamp;
+    }
+
+    function isValidNotification(data) {
+      return data.keys().hasAll([
+          'uid', 'title', 'message', 'type', 'isRead', 'createdAt', 'updatedAt'
+        ]) &&
+        data.keys().hasOnly([
+          'uid', 'title', 'message', 'type', 'isRead', 'createdAt', 'updatedAt'
+        ]) &&
+        data.uid is string && data.uid.size() >= 1 && data.uid.size() <= 128 && data.uid.matches('^[a-zA-Z0-9_\\-]+$') &&
+        data.title is string && data.title.size() >= 2 && data.title.size() <= 100 &&
+        data.message is string && data.message.size() >= 2 && data.message.size() <= 300 &&
+        data.type is string && (
+          data.type == 'INFO' ||
+          data.type == 'SUCCESS' ||
+          data.type == 'WARNING' ||
+          data.type == 'REWARD'
+        ) &&
+        data.isRead is bool &&
+        data.createdAt is timestamp &&
+        data.updatedAt is timestamp;
+    }
+
+    function isValidDragonLevel(data) {
+      return data.keys().hasAll([
+          'level', 'name', 'titleBadge', 'requiredCoins', 'requiredFire',
+          'tapMultiplier', 'maxEnergy', 'dailyFireBonus', 'updatedAt'
+        ]) &&
+        data.keys().hasOnly([
+          'level', 'name', 'titleBadge', 'requiredCoins', 'requiredFire',
+          'tapMultiplier', 'maxEnergy', 'dailyFireBonus', 'updatedAt'
+        ]) &&
+        data.level is int && data.level >= 1 && data.level <= 100 &&
+        data.name is string && data.name.size() >= 2 && data.name.size() <= 60 &&
+        data.titleBadge is string && data.titleBadge.size() <= 60 &&
+        data.requiredCoins is int && data.requiredCoins >= 0 &&
+        data.requiredFire is int && data.requiredFire >= 0 &&
+        data.tapMultiplier is int && data.tapMultiplier >= 1 && data.tapMultiplier <= 1000 &&
+        data.maxEnergy is int && data.maxEnergy >= 100 && data.maxEnergy <= 100000 &&
+        data.dailyFireBonus is int && data.dailyFireBonus >= 0 &&
+        data.updatedAt is timestamp;
+    }
+
+    function isValidGameSettings(data) {
+      return data.keys().hasAll([
+          'settingId', 'coinsPerTap', 'energyCostPerTap', 'baseMaxEnergy',
+          'energyRegenPerMinute', 'coinToIdrRate', 'fireToIdrRate',
+          'referralRewardCoin', 'referralRewardFire', 'referralRewardIdr',
+          'minWithdrawIdr', 'maintenanceMode', 'announcementText', 'updatedAt'
+        ]) &&
+        data.keys().hasOnly([
+          'settingId', 'coinsPerTap', 'energyCostPerTap', 'baseMaxEnergy',
+          'energyRegenPerMinute', 'coinToIdrRate', 'fireToIdrRate',
+          'referralRewardCoin', 'referralRewardFire', 'referralRewardIdr',
+          'minWithdrawIdr', 'maintenanceMode', 'announcementText', 'updatedAt'
+        ]) &&
+        data.settingId is string && data.settingId.size() >= 1 && data.settingId.size() <= 64 && data.settingId.matches('^[a-zA-Z0-9_\\-]+$') &&
+        data.coinsPerTap is int && data.coinsPerTap >= 1 && data.coinsPerTap <= 100000 &&
+        data.energyCostPerTap is int && data.energyCostPerTap >= 1 && data.energyCostPerTap <= 1000 &&
+        data.baseMaxEnergy is int && data.baseMaxEnergy >= 100 && data.baseMaxEnergy <= 100000 &&
+        data.energyRegenPerMinute is int && data.energyRegenPerMinute >= 1 && data.energyRegenPerMinute <= 10000 &&
+        data.coinToIdrRate is int && data.coinToIdrRate >= 1 &&
+        data.fireToIdrRate is int && data.fireToIdrRate >= 1 &&
+        data.referralRewardCoin is int && data.referralRewardCoin >= 0 &&
+        data.referralRewardFire is int && data.referralRewardFire >= 0 &&
+        data.referralRewardIdr is int && data.referralRewardIdr >= 0 &&
+        data.minWithdrawIdr is int && data.minWithdrawIdr >= 10000 &&
+        data.maintenanceMode is bool &&
+        data.announcementText is string && data.announcementText.size() <= 240 &&
+        data.updatedAt is timestamp;
+    }
+
+    function isValidAdminAuditLog(data) {
+      return data.keys().hasAll([
+          'adminUid', 'adminEmail', 'action', 'targetId', 'details', 'createdAt'
+        ]) &&
+        data.keys().hasOnly([
+          'adminUid', 'adminEmail', 'action', 'targetId', 'details', 'createdAt'
+        ]) &&
+        data.adminUid is string && data.adminUid.size() >= 1 && data.adminUid.size() <= 128 && data.adminUid.matches('^[a-zA-Z0-9_\\-]+$') &&
+        data.adminEmail is string && data.adminEmail.size() >= 3 && data.adminEmail.size() <= 256 &&
+        data.action is string && data.action.size() >= 2 && data.action.size() <= 80 &&
+        data.targetId is string && data.targetId.size() >= 1 && data.targetId.size() <= 128 &&
+        data.details is string && data.details.size() >= 2 && data.details.size() <= 400 &&
+        data.createdAt is timestamp;
+    }
+
+    // =========================================================================
+    // COLLECTION MATCH BLOCKS
+    // =========================================================================
+
+    // 1. /admins/{adminUid}
+    match /admins/{adminUid} {
+      allow get: if isVerifiedUser() && isValidId(adminUid) && (request.auth.uid == adminUid || isAdmin());
+      allow list: if isAdmin();
+      allow create: if isAdmin() && isValidId(adminUid) && isValidAdminRole(incoming()) &&
+        incoming().uid == adminUid &&
+        incoming().createdAt == request.time;
+      allow update: if isAdmin() && isValidId(adminUid) && isValidAdminRole(incoming()) &&
+        incoming().uid == existing().uid &&
+        incoming().createdAt == existing().createdAt &&
+        incoming().diff(existing()).affectedKeys().hasOnly(['email']);
+      allow delete: if isAdmin() && isValidId(adminUid);
+    }
+
+    // 2. /users/{userId}
+    match /users/{userId} {
+      allow get: if isVerifiedUser() && isValidId(userId);
+      allow list: if isVerifiedUser() && (resource.data.uid == request.auth.uid || resource.data.status == 'active' || isAdmin());
+      allow create: if isOwner(userId) && isValidId(userId) && isValidUser(incoming()) &&
+        incoming().uid == userId &&
+        incoming().status == 'active' &&
+        (incoming().role == 'player' || isAdmin()) &&
+        incoming().createdAt == request.time &&
+        incoming().updatedAt == request.time;
+      allow update: if isVerifiedUser() && isValidId(userId) && isValidUser(incoming()) && (
+        (
+          isOwner(userId) &&
+          incoming().uid == existing().uid &&
+          incoming().role == existing().role &&
+          incoming().status == existing().status &&
+          incoming().referralCode == existing().referralCode &&
+          incoming().createdAt == existing().createdAt &&
+          incoming().updatedAt == request.time &&
+          incoming().diff(existing()).affectedKeys().hasOnly([
+            'username', 'avatarUrl', 'referredByUid', 'referredByCode',
+            'dragonLevel', 'totalTaps', 'dailyStreak', 'lastCheckInDate', 'updatedAt'
+          ])
+        ) ||
+        (
+          isAdmin() &&
+          incoming().uid == existing().uid &&
+          incoming().createdAt == existing().createdAt &&
+          incoming().updatedAt == request.time
+        )
+      );
+      allow delete: if false;
+    }
+
+    // 3. /profiles/{userId} (PII Isolated - Owner or Admin Only)
+    match /profiles/{userId} {
+      allow get: if isVerifiedUser() && isValidId(userId) && (isOwner(userId) || isAdmin());
+      allow list: if isVerifiedUser() && (resource.data.uid == request.auth.uid || isAdmin());
+      allow create: if isOwner(userId) && isValidId(userId) && isValidProfile(incoming()) &&
+        incoming().uid == userId &&
+        incoming().updatedAt == request.time &&
+        userExists(userId);
+      allow update: if isVerifiedUser() && isValidId(userId) && isValidProfile(incoming()) && (
+        (
+          isOwner(userId) &&
+          incoming().uid == existing().uid &&
+          incoming().email == existing().email &&
+          incoming().updatedAt == request.time &&
+          incoming().diff(existing()).affectedKeys().hasOnly([
+            'fullName', 'phone', 'defaultEwallet', 'ewalletNumber',
+            'ewalletAccountName', 'pinHash', 'notificationsEnabled', 'updatedAt'
+          ])
+        ) ||
+        (
+          isAdmin() &&
+          incoming().uid == existing().uid &&
+          incoming().updatedAt == request.time
+        )
+      );
+      allow delete: if false;
+    }
+
+    // 4. /wallets/{userId}
+    match /wallets/{userId} {
+      allow get: if isVerifiedUser() && isValidId(userId) && (isOwner(userId) || isAdmin());
+      allow list: if isVerifiedUser() && (resource.data.uid == request.auth.uid || isAdmin());
+      allow create: if isOwner(userId) && isValidId(userId) && isValidWallet(incoming()) &&
+        incoming().uid == userId &&
+        incoming().updatedAt == request.time;
+      allow update: if isVerifiedUser() && isValidId(userId) && isValidWallet(incoming()) && (
+        (
+          isOwner(userId) &&
+          incoming().uid == existing().uid &&
+          incoming().updatedAt == request.time &&
+          incoming().diff(existing()).affectedKeys().hasOnly([
+            'coinBalance', 'fireBalance', 'idrBalance', 'lockedIdrBalance',
+            'energy', 'maxEnergy', 'totalEarnedCoins', 'totalEarnedFire',
+            'totalWithdrawnIdr', 'updatedAt'
+          ])
+        ) ||
+        (
+          isAdmin() &&
+          incoming().uid == existing().uid &&
+          incoming().updatedAt == request.time
+        )
+      );
+      allow delete: if false;
+    }
+
+    // 5. /wallet_transactions/{txId} (Immutable Append-Only Ledger)
+    match /wallet_transactions/{txId} {
+      allow get: if isVerifiedUser() && isValidId(txId) && (resource.data.uid == request.auth.uid || isAdmin());
+      allow list: if isVerifiedUser() && (resource.data.uid == request.auth.uid || isAdmin());
+      allow create: if isVerifiedUser() && isValidId(txId) && isValidWalletTransaction(incoming()) &&
+        (incoming().uid == request.auth.uid || isAdmin()) &&
+        incoming().createdAt == request.time &&
+        userExists(incoming().uid);
+      allow update, delete: if false;
+    }
+
+    // 6. /tasks/{taskId}
+    match /tasks/{taskId} {
+      allow get: if isVerifiedUser() && isValidId(taskId);
+      allow list: if isVerifiedUser() && (resource.data.isActive == true || isAdmin());
+      allow create: if isVerifiedUser() && isValidId(taskId) && isValidTask(incoming()) &&
+        incoming().taskId == taskId &&
+        incoming().updatedAt == request.time &&
+        (isAdmin() || !exists(/databases/$(database)/documents/tasks/$(taskId)));
+      allow update: if isVerifiedUser() && isValidId(taskId) && isValidTask(incoming()) && (
+        isAdmin() &&
+        incoming().taskId == existing().taskId &&
+        incoming().updatedAt == request.time &&
+        incoming().diff(existing()).affectedKeys().hasOnly([
+          'title', 'description', 'category', 'targetCount', 'metricType',
+          'coinReward', 'fireReward', 'idrReward', 'isActive', 'updatedAt'
+        ])
+      );
+      allow delete: if isAdmin() && isValidId(taskId);
+    }
+
+    // 7. /task_claims/{claimId} (Immutable Duplicate-Claim Lock)
+    match /task_claims/{claimId} {
+      allow get: if isVerifiedUser() && isValidId(claimId) && (resource.data.uid == request.auth.uid || isAdmin());
+      allow list: if isVerifiedUser() && (resource.data.uid == request.auth.uid || isAdmin());
+      allow create: if isVerifiedUser() && isValidId(claimId) && isValidTaskClaim(incoming()) &&
+        incoming().claimId == claimId &&
+        incoming().uid == request.auth.uid &&
+        incoming().claimedAt == request.time &&
+        userExists(incoming().uid) &&
+        exists(/databases/$(database)/documents/tasks/$(incoming().taskId));
+      allow update, delete: if false;
+    }
+
+    // 8. /reward_codes/{codeId}
+    match /reward_codes/{codeId} {
+      allow get: if isVerifiedUser() && isValidId(codeId);
+      allow list: if isVerifiedUser() && (resource.data.isActive == true || isAdmin());
+      allow create: if isVerifiedUser() && isValidId(codeId) && isValidRewardCode(incoming()) &&
+        incoming().code == codeId &&
+        incoming().updatedAt == request.time &&
+        (isAdmin() || !exists(/databases/$(database)/documents/reward_codes/$(codeId)));
+      allow update: if isVerifiedUser() && isValidId(codeId) && isValidRewardCode(incoming()) && (
+        (
+          // Action: Player Redeeming Code (increments claimedCount by 1)
+          existing().isActive == true &&
+          incoming().code == existing().code &&
+          incoming().claimedCount == existing().claimedCount + 1 &&
+          incoming().updatedAt == request.time &&
+          incoming().diff(existing()).affectedKeys().hasOnly(['claimedCount', 'updatedAt'])
+        ) ||
+        (
+          // Action: Admin Managing Code
+          isAdmin() &&
+          incoming().code == existing().code &&
+          incoming().updatedAt == request.time
+        )
+      );
+      allow delete: if isAdmin() && isValidId(codeId);
+    }
+
+    // 9. /reward_code_claims/{claimId} (Immutable Single-Claim Lock)
+    match /reward_code_claims/{claimId} {
+      allow get: if isVerifiedUser() && isValidId(claimId) && (resource.data.uid == request.auth.uid || isAdmin());
+      allow list: if isVerifiedUser() && (resource.data.uid == request.auth.uid || isAdmin());
+      allow create: if isVerifiedUser() && isValidId(claimId) && isValidRewardCodeClaim(incoming()) &&
+        incoming().claimId == claimId &&
+        incoming().uid == request.auth.uid &&
+        incoming().claimedAt == request.time &&
+        userExists(incoming().uid) &&
+        exists(/databases/$(database)/documents/reward_codes/$(incoming().code));
+      allow update, delete: if false;
+    }
+
+    // 10. /referrals/{referralId}
+    match /referrals/{referralId} {
+      allow get: if isVerifiedUser() && isValidId(referralId) && (
+        resource.data.inviterUid == request.auth.uid ||
+        resource.data.inviteeUid == request.auth.uid ||
+        isAdmin()
+      );
+      allow list: if isVerifiedUser() && (
+        resource.data.inviterUid == request.auth.uid ||
+        resource.data.inviteeUid == request.auth.uid ||
+        isAdmin()
+      );
+      allow create: if isVerifiedUser() && isValidId(referralId) && isValidReferral(incoming()) &&
+        incoming().referralId == referralId &&
+        incoming().inviteeUid == request.auth.uid &&
+        incoming().createdAt == request.time &&
+        incoming().updatedAt == request.time &&
+        userExists(incoming().inviterUid) &&
+        userExists(incoming().inviteeUid);
+      allow update: if isVerifiedUser() && isValidId(referralId) && isValidReferral(incoming()) && (
+        (
+          // Action: Verify Pending Referral (Terminal Lock once VERIFIED)
+          existing().status == 'PENDING' &&
+          incoming().status == 'VERIFIED' &&
+          (request.auth.uid == existing().inviteeUid || request.auth.uid == existing().inviterUid || isAdmin()) &&
+          incoming().referralId == existing().referralId &&
+          incoming().inviterUid == existing().inviterUid &&
+          incoming().inviteeUid == existing().inviteeUid &&
+          incoming().createdAt == existing().createdAt &&
+          incoming().updatedAt == request.time &&
+          incoming().diff(existing()).affectedKeys().hasOnly(['status', 'updatedAt'])
+        ) ||
+        (
+          isAdmin() &&
+          incoming().referralId == existing().referralId &&
+          incoming().inviterUid == existing().inviterUid &&
+          incoming().inviteeUid == existing().inviteeUid &&
+          incoming().createdAt == existing().createdAt &&
+          incoming().updatedAt == request.time
+        )
+      );
+      allow delete: if false;
+    }
+
+    // 11. /creator_submissions/{submissionId}
+    match /creator_submissions/{submissionId} {
+      allow get: if isVerifiedUser() && isValidId(submissionId) && (resource.data.uid == request.auth.uid || isAdmin());
+      allow list: if isVerifiedUser() && (resource.data.uid == request.auth.uid || isAdmin());
+      allow create: if isVerifiedUser() && isValidId(submissionId) && isValidCreatorSubmission(incoming()) &&
+        incoming().submissionId == submissionId &&
+        incoming().uid == request.auth.uid &&
+        incoming().status == 'PENDING' &&
+        incoming().createdAt == request.time &&
+        incoming().updatedAt == request.time &&
+        userExists(incoming().uid);
+      allow update: if isVerifiedUser() && isValidId(submissionId) && isValidCreatorSubmission(incoming()) && (
+        // Terminal State Lock: only Admin can update status/reward/note
+        isAdmin() &&
+        incoming().submissionId == existing().submissionId &&
+        incoming().uid == existing().uid &&
+        incoming().createdAt == existing().createdAt &&
+        incoming().updatedAt == request.time &&
+        incoming().diff(existing()).affectedKeys().hasOnly([
+          'status', 'rewardCoin', 'rewardFire', 'rewardIdr', 'adminNote', 'updatedAt'
+        ])
+      );
+      allow delete: if false;
+    }
+
+    // 12. /withdrawals/{withdrawalId}
+    match /withdrawals/{withdrawalId} {
+      allow get: if isVerifiedUser() && isValidId(withdrawalId) && (resource.data.uid == request.auth.uid || isAdmin());
+      allow list: if isVerifiedUser() && (resource.data.uid == request.auth.uid || isAdmin());
+      allow create: if isVerifiedUser() && isValidId(withdrawalId) && isValidWithdrawal(incoming()) &&
+        incoming().withdrawalId == withdrawalId &&
+        incoming().uid == request.auth.uid &&
+        incoming().status == 'PENDING' &&
+        incoming().createdAt == request.time &&
+        incoming().updatedAt == request.time &&
+        userExists(incoming().uid);
+      allow update: if isVerifiedUser() && isValidId(withdrawalId) && isValidWithdrawal(incoming()) && (
+        // Terminal State Lock: Only Admin can transition withdrawal status
+        isAdmin() &&
+        incoming().withdrawalId == existing().withdrawalId &&
+        incoming().uid == existing().uid &&
+        incoming().amount == existing().amount &&
+        incoming().createdAt == existing().createdAt &&
+        incoming().updatedAt == request.time &&
+        incoming().diff(existing()).affectedKeys().hasOnly([
+          'status', 'paymentReference', 'adminNote', 'updatedAt'
+        ])
+      );
+      allow delete: if false;
+    }
+
+    // 13. /notifications/{notificationId}
+    match /notifications/{notificationId} {
+      allow get: if isVerifiedUser() && isValidId(notificationId) && (resource.data.uid == request.auth.uid || isAdmin());
+      allow list: if isVerifiedUser() && (resource.data.uid == request.auth.uid || isAdmin());
+      allow create: if isVerifiedUser() && isValidId(notificationId) && isValidNotification(incoming()) &&
+        (incoming().uid == request.auth.uid || isAdmin()) &&
+        incoming().createdAt == request.time &&
+        incoming().updatedAt == request.time &&
+        userExists(incoming().uid);
+      allow update: if isVerifiedUser() && isValidId(notificationId) && isValidNotification(incoming()) && (
+        (
+          // Action: Owner marks notification as read
+          resource.data.uid == request.auth.uid &&
+          incoming().uid == existing().uid &&
+          incoming().title == existing().title &&
+          incoming().message == existing().message &&
+          incoming().type == existing().type &&
+          incoming().createdAt == existing().createdAt &&
+          incoming().updatedAt == request.time &&
+          incoming().diff(existing()).affectedKeys().hasOnly(['isRead', 'updatedAt'])
+        ) ||
+        (
+          isAdmin() &&
+          incoming().uid == existing().uid &&
+          incoming().createdAt == existing().createdAt &&
+          incoming().updatedAt == request.time
+        )
+      );
+      allow delete: if false;
+    }
+
+    // 14. /levels/{levelId}
+    match /levels/{levelId} {
+      allow get: if isVerifiedUser() && isValidId(levelId);
+      allow list: if isVerifiedUser() && (resource.data.level >= 1 || isAdmin());
+      allow create: if isVerifiedUser() && isValidId(levelId) && isValidDragonLevel(incoming()) &&
+        incoming().updatedAt == request.time &&
+        (isAdmin() || !exists(/databases/$(database)/documents/levels/$(levelId)));
+      allow update: if isVerifiedUser() && isValidId(levelId) && isValidDragonLevel(incoming()) && (
+        isAdmin() &&
+        incoming().level == existing().level &&
+        incoming().updatedAt == request.time &&
+        incoming().diff(existing()).affectedKeys().hasOnly([
+          'name', 'titleBadge', 'requiredCoins', 'requiredFire',
+          'tapMultiplier', 'maxEnergy', 'dailyFireBonus', 'updatedAt'
+        ])
+      );
+      allow delete: if isAdmin() && isValidId(levelId);
+    }
+
+    // 15. /game_settings/{settingId}
+    match /game_settings/{settingId} {
+      allow get: if isVerifiedUser() && isValidId(settingId);
+      allow list: if isVerifiedUser() && (resource.data.settingId == 'global' || isAdmin());
+      allow create: if isVerifiedUser() && isValidId(settingId) && isValidGameSettings(incoming()) &&
+        incoming().settingId == settingId &&
+        incoming().updatedAt == request.time &&
+        (isAdmin() || !exists(/databases/$(database)/documents/game_settings/$(settingId)));
+      allow update: if isVerifiedUser() && isValidId(settingId) && isValidGameSettings(incoming()) && (
+        isAdmin() &&
+        incoming().settingId == existing().settingId &&
+        incoming().updatedAt == request.time &&
+        incoming().diff(existing()).affectedKeys().hasOnly([
+          'coinsPerTap', 'energyCostPerTap', 'baseMaxEnergy', 'energyRegenPerMinute',
+          'coinToIdrRate', 'fireToIdrRate', 'referralRewardCoin', 'referralRewardFire',
+          'referralRewardIdr', 'minWithdrawIdr', 'maintenanceMode', 'announcementText', 'updatedAt'
+        ])
+      );
+      allow delete: if false;
+    }
+
+    // 16. /admin_audit_logs/{logId} (Immutable Admin Audit Trail)
+    match /admin_audit_logs/{logId} {
+      allow get: if isAdmin() && isValidId(logId);
+      allow list: if isAdmin() && resource.data.adminUid is string;
+      allow create: if isAdmin() && isValidId(logId) && isValidAdminAuditLog(incoming()) &&
+        incoming().adminUid == request.auth.uid &&
+        incoming().createdAt == request.time;
+      allow update, delete: if false;
+    }
+  }
+}

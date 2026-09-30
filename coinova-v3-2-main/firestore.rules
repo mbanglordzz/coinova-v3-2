@@ -1,0 +1,651 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ===============================================================
+    // Helper Functions
+    // ===============================================================
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    function isAdmin() {
+      return isAuthenticated() && (
+        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role in ['admin', 'ADMIN']) ||
+        (request.auth.token.email == "lordzmbang08@gmail.com" && request.auth.token.email_verified == true)
+      );
+    }
+
+    function isValidDateString(val) {
+      return val is timestamp || (val is string && val.size() >= 8 && val.size() <= 64);
+    }
+
+    function hasRequiredFields(fields) {
+      return request.resource.data.keys().hasAll(fields);
+    }
+
+    function hasOnlyAllowedFields(fields) {
+      return request.resource.data.keys().hasOnly(fields);
+    }
+
+    // ===============================================================
+    // Domain Validators
+    // ===============================================================
+    function isValidUserAccount(data) {
+      return hasRequiredFields(['uid', 'username', 'referralCode', 'dragonLevel', 'totalTaps', 'dailyStreak', 'role', 'status', 'createdAt', 'updatedAt']) &&
+        hasOnlyAllowedFields(['uid', 'username', 'avatarUrl', 'referralCode', 'referredByUid', 'referredByCode', 'dragonLevel', 'totalTaps', 'dailyStreak', 'lastCheckInDate', 'lastConvertDate', 'dailyConvertedFire', 'cycleProgress', 'dailyClaimsUsed', 'lastClaimDate', 'role', 'status', 'createdAt', 'updatedAt']) &&
+        data.uid is string && data.uid.size() > 0 && data.uid.size() <= 128 &&
+        data.username is string && data.username.size() >= 2 && data.username.size() <= 60 &&
+        data.referralCode is string && data.referralCode.size() >= 4 && data.referralCode.size() <= 32 &&
+        data.dragonLevel is int && data.dragonLevel >= 1 && data.dragonLevel <= 10 &&
+        data.totalTaps is int && data.totalTaps >= 0 &&
+        data.dailyStreak is int && data.dailyStreak >= 0 &&
+        data.role in ['player', 'admin', 'USER', 'ADMIN'] &&
+        data.status in ['active', 'suspended'] &&
+        isValidDateString(data.createdAt) &&
+        isValidDateString(data.updatedAt);
+    }
+
+    function isValidUserProfile(data) {
+      return hasRequiredFields(['uid', 'email', 'defaultEwallet', 'ewalletNumber', 'ewalletAccountName', 'notificationsEnabled', 'updatedAt']) &&
+        hasOnlyAllowedFields(['uid', 'email', 'fullName', 'phone', 'defaultEwallet', 'ewalletNumber', 'ewalletAccountName', 'pinHash', 'notificationsEnabled', 'updatedAt']) &&
+        data.uid is string && data.uid.size() > 0 && data.uid.size() <= 128 &&
+        data.email is string && data.email.size() <= 150 &&
+        data.defaultEwallet in ['DANA', 'GoPay', 'OVO', 'ShopeePay'] &&
+        data.ewalletNumber is string && data.ewalletNumber.size() <= 40 &&
+        data.ewalletAccountName is string && data.ewalletAccountName.size() <= 100 &&
+        data.notificationsEnabled is bool &&
+        isValidDateString(data.updatedAt);
+    }
+
+    function isValidUserWallet(data) {
+      return hasRequiredFields(['uid', 'coinBalance', 'fireBalance', 'idrBalance', 'lockedIdrBalance', 'energy', 'maxEnergy', 'totalEarnedCoins', 'totalEarnedFire', 'totalWithdrawnIdr', 'updatedAt']) &&
+        hasOnlyAllowedFields(['uid', 'coinBalance', 'fireBalance', 'idrBalance', 'lockedIdrBalance', 'energy', 'maxEnergy', 'totalEarnedCoins', 'totalEarnedFire', 'totalWithdrawnIdr', 'dailyConvertedFireAmount', 'lastConvertedDateKey', 'updatedAt']) &&
+        data.uid is string && data.uid.size() > 0 && data.uid.size() <= 128 &&
+        data.coinBalance is number && data.coinBalance >= 0 &&
+        data.fireBalance is number && data.fireBalance >= 0 &&
+        data.idrBalance is number && data.idrBalance >= 0 &&
+        data.lockedIdrBalance is number && data.lockedIdrBalance >= 0 &&
+        data.energy is int && data.energy >= 0 &&
+        data.maxEnergy is int && data.maxEnergy >= 10 &&
+        data.totalEarnedCoins is number && data.totalEarnedCoins >= 0 &&
+        data.totalEarnedFire is number && data.totalEarnedFire >= 0 &&
+        data.totalWithdrawnIdr is number && data.totalWithdrawnIdr >= 0 &&
+        (!('dailyConvertedFireAmount' in data) || (data.dailyConvertedFireAmount is number && data.dailyConvertedFireAmount >= 0 && data.dailyConvertedFireAmount <= 10)) &&
+        (!('lastConvertedDateKey' in data) || (data.lastConvertedDateKey is string && data.lastConvertedDateKey.size() <= 20)) &&
+        isValidDateString(data.updatedAt);
+    }
+
+    function isValidTransaction(data) {
+      return hasRequiredFields(['uid', 'category', 'direction', 'currency', 'amount', 'description', 'createdAt']) &&
+        hasOnlyAllowedFields(['id', 'uid', 'category', 'direction', 'currency', 'amount', 'description', 'referenceId', 'createdAt']) &&
+        data.uid is string && data.uid.size() > 0 && data.uid.size() <= 128 &&
+        data.category in ['PENDAPATAN', 'KONVERSI', 'TASK', 'REFERRAL', 'REWARD', 'LEVEL', 'WITHDRAWAL', 'ADMIN'] &&
+        data.direction in ['CREDIT', 'DEBIT', 'HOLD', 'REFUND'] &&
+        data.currency in ['COIN', 'FIRE', 'IDR'] &&
+        data.amount is number && data.amount >= 0 &&
+        data.description is string && data.description.size() > 0 && data.description.size() <= 300;
+    }
+
+    function isValidLevelUpgradeOrder(data) {
+      return hasRequiredFields(['orderId', 'uid', 'username', 'targetLevel', 'priceIdr', 'paymentMethod', 'status', 'createdAt', 'updatedAt']) &&
+        hasOnlyAllowedFields(['orderId', 'uid', 'username', 'currentLevel', 'targetLevel', 'levelName', 'priceIdr', 'paymentMethod', 'paymentAccountNumber', 'paymentAccountName', 'paymentProofNote', 'paymentReference', 'paymentProofDataUrl', 'paymentProofFileName', 'paidSubmittedAt', 'status', 'adminNote', 'createdAt', 'updatedAt']) &&
+        data.orderId is string && data.orderId.size() > 0 && data.orderId.size() <= 128 &&
+        data.uid is string && data.uid.size() > 0 && data.uid.size() <= 128 &&
+        data.username is string && data.username.size() >= 1 && data.username.size() <= 80 &&
+        data.targetLevel is int && data.targetLevel >= 2 && data.targetLevel <= 5 &&
+        data.priceIdr is number && data.priceIdr >= 10000 &&
+        data.paymentMethod in ['QRIS', 'DANA', 'GoPay', 'OVO', 'ShopeePay'] &&
+        data.status in ['WAITING_PAYMENT', 'PENDING_VERIFICATION', 'PAID', 'REJECTED'] &&
+        isValidDateString(data.createdAt) &&
+        isValidDateString(data.updatedAt);
+    }
+
+    function isValidWithdrawal(data) {
+      return hasRequiredFields(['withdrawalId', 'uid', 'username', 'method', 'accountNumber', 'accountName', 'amount', 'status', 'createdAt', 'updatedAt']) &&
+        hasOnlyAllowedFields(['withdrawalId', 'uid', 'username', 'method', 'accountNumber', 'accountName', 'amount', 'coinDeducted', 'fireDeducted', 'status', 'paymentReference', 'adminNote', 'createdAt', 'updatedAt']) &&
+        data.withdrawalId is string && data.withdrawalId.size() > 0 && data.withdrawalId.size() <= 128 &&
+        data.uid is string && data.uid.size() > 0 && data.uid.size() <= 128 &&
+        data.username is string && data.username.size() <= 80 &&
+        data.method in ['DANA', 'GoPay', 'OVO', 'ShopeePay'] &&
+        data.accountNumber is string && data.accountNumber.size() >= 6 && data.accountNumber.size() <= 40 &&
+        data.accountName is string && data.accountName.size() >= 2 && data.accountName.size() <= 100 &&
+        data.amount is number && data.amount >= 50000 &&
+        data.status in ['PENDING', 'PROCESSING', 'PAID', 'REJECTED'] &&
+        isValidDateString(data.createdAt) &&
+        isValidDateString(data.updatedAt);
+    }
+
+    function isValidCreatorSubmission(data) {
+      return hasRequiredFields(['submissionId', 'uid', 'username', 'platform', 'contentUrl', 'status', 'rewardCoin', 'rewardFire', 'rewardIdr', 'createdAt', 'updatedAt']) &&
+        hasOnlyAllowedFields(['submissionId', 'uid', 'username', 'platform', 'contentUrl', 'caption', 'status', 'rewardCoin', 'rewardFire', 'rewardIdr', 'adminNote', 'createdAt', 'updatedAt']) &&
+        data.submissionId is string && data.submissionId.size() > 0 && data.submissionId.size() <= 128 &&
+        data.uid is string && data.uid.size() > 0 && data.uid.size() <= 128 &&
+        data.username is string && data.username.size() <= 80 &&
+        data.platform in ['TikTok', 'YouTube', 'Instagram', 'Facebook'] &&
+        data.contentUrl is string && data.contentUrl.size() >= 8 && data.contentUrl.size() <= 400 &&
+        data.status in ['PENDING', 'APPROVED', 'REJECTED'] &&
+        data.rewardCoin is number && data.rewardCoin >= 0 &&
+        data.rewardFire is number && data.rewardFire >= 0 &&
+        data.rewardIdr is number && data.rewardIdr >= 0 &&
+        isValidDateString(data.createdAt) &&
+        isValidDateString(data.updatedAt);
+    }
+
+    function isValidDocId(id) {
+      return id is string && id.size() >= 1 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-.]+$');
+    }
+
+    function isValidServerRealm(realm) {
+      return realm in ['coinova_srv_v3', 'coinova_prelaunch_2026_v5'];
+    }
+
+    function isValidServerAccount(data) {
+      return hasRequiredFields(['uid', 'username', 'usernameLower', 'passwordHash', 'referralCode', 'dragonLevel', 'createdAt', 'updatedAt', 'serverRealm']) &&
+        hasOnlyAllowedFields(['uid', 'username', 'usernameLower', 'email', 'passwordHash', 'referralCode', 'referredByCode', 'referredByUid', 'dragonLevel', 'status', 'createdAt', 'updatedAt', 'serverRealm']) &&
+        isValidServerRealm(data.serverRealm) &&
+        data.uid is string && data.uid.size() >= 2 && data.uid.size() <= 128 &&
+        data.username is string && data.username.size() >= 2 && data.username.size() <= 64 &&
+        data.usernameLower is string && data.usernameLower.size() >= 2 && data.usernameLower.size() <= 64 &&
+        data.passwordHash is string && data.passwordHash.size() >= 32 && data.passwordHash.size() <= 128 &&
+        data.referralCode is string && data.referralCode.size() >= 4 && data.referralCode.size() <= 32 &&
+        data.dragonLevel is int && data.dragonLevel >= 1 && data.dragonLevel <= 10 &&
+        isValidDateString(data.createdAt) &&
+        isValidDateString(data.updatedAt);
+    }
+
+    function isValidServerState(data) {
+      return hasRequiredFields(['uid', 'dragonLevel', 'coinBalance', 'fireBalance', 'lockedIdrBalance', 'energy', 'maxEnergy', 'lastEnergyRegenMs', 'dailyClaimsUsed', 'lastClaimDate', 'lastConvertDate', 'dailyConvertedFire', 'totalTaps', 'updatedAt', 'serverRealm']) &&
+        isValidServerRealm(data.serverRealm) &&
+        data.uid is string && data.uid.size() >= 2 && data.uid.size() <= 128 &&
+        data.dragonLevel is int && data.dragonLevel >= 1 && data.dragonLevel <= 10 &&
+        data.coinBalance is number && data.coinBalance >= 0 &&
+        data.fireBalance is number && data.fireBalance >= 0 &&
+        data.lockedIdrBalance is number && data.lockedIdrBalance >= 0 &&
+        data.energy is int && data.energy >= 0 &&
+        data.maxEnergy is int && data.maxEnergy >= 10 &&
+        data.lastEnergyRegenMs is number && data.lastEnergyRegenMs >= 0 &&
+        data.dailyClaimsUsed is int && data.dailyClaimsUsed >= 0 &&
+        data.lastClaimDate is string && data.lastClaimDate.size() <= 32 &&
+        data.lastConvertDate is string && data.lastConvertDate.size() <= 32 &&
+        data.dailyConvertedFire is number && data.dailyConvertedFire >= 0 &&
+        data.totalTaps is int && data.totalTaps >= 0 &&
+        isValidDateString(data.updatedAt);
+    }
+
+    function isValidServerReferral(data) {
+      return hasRequiredFields(['referralId', 'inviterUid', 'inviteeUid', 'status', 'activeRewardClaimed', 'topupRewardClaimed', 'updatedAt', 'serverRealm']) &&
+        isValidServerRealm(data.serverRealm) &&
+        data.referralId is string && data.referralId.size() >= 2 && data.referralId.size() <= 128 &&
+        data.inviterUid is string && data.inviterUid.size() <= 128 &&
+        data.inviteeUid is string && data.inviteeUid.size() <= 128 &&
+        data.status in ['PENDING', 'ACTIVE', 'VERIFIED', 'REJECTED'] &&
+        data.activeRewardClaimed is bool &&
+        data.topupRewardClaimed is bool &&
+        isValidDateString(data.updatedAt);
+    }
+
+    function isValidServerTransaction(data) {
+      return hasRequiredFields(['id', 'uid', 'category', 'direction', 'currency', 'amount', 'description', 'referenceId', 'createdAt', 'serverRealm']) &&
+        isValidServerRealm(data.serverRealm) &&
+        data.id is string && data.id.size() >= 2 && data.id.size() <= 128 &&
+        data.uid is string && data.uid.size() >= 2 && data.uid.size() >= 2 && data.uid.size() <= 128 &&
+        data.category is string && data.category.size() <= 64 &&
+        data.direction in ['CREDIT', 'DEBIT', 'HOLD', 'REFUND'] &&
+        data.currency in ['COIN', 'FIRE', 'IDR'] &&
+        data.amount is number && data.amount >= 0 &&
+        data.description is string && data.description.size() <= 500 &&
+        data.referenceId is string && data.referenceId.size() <= 128 &&
+        isValidDateString(data.createdAt);
+    }
+
+    function isValidServerWithdrawal(data) {
+      return hasRequiredFields(['withdrawalId', 'uid', 'method', 'accountNumber', 'accountName', 'amount', 'status', 'createdAt', 'updatedAt', 'serverRealm']) &&
+        isValidServerRealm(data.serverRealm) &&
+        data.withdrawalId is string && data.withdrawalId.size() >= 2 && data.withdrawalId.size() <= 128 &&
+        data.uid is string && data.uid.size() >= 2 && data.uid.size() <= 128 &&
+        data.method in ['DANA', 'GoPay', 'OVO', 'ShopeePay'] &&
+        data.accountNumber is string && data.accountNumber.size() >= 6 && data.accountNumber.size() <= 40 &&
+        data.accountName is string && data.accountName.size() >= 2 && data.accountName.size() <= 100 &&
+        data.amount is number && data.amount >= 10000 &&
+        data.status in ['PENDING', 'PROCESSING', 'PAID', 'REJECTED'] &&
+        isValidDateString(data.createdAt) &&
+        isValidDateString(data.updatedAt);
+    }
+
+    function isValidServerAdminAudit(data) {
+      return hasRequiredFields(['auditId', 'adminId', 'timestamp', 'action', 'targetUser', 'amountOrStatus', 'details', 'serverRealm']) &&
+        hasOnlyAllowedFields(['auditId', 'adminId', 'timestamp', 'action', 'targetUser', 'amountOrStatus', 'details', 'serverRealm']) &&
+        isValidServerRealm(data.serverRealm) &&
+        data.auditId is string && data.auditId.size() >= 2 && data.auditId.size() <= 128 &&
+        data.adminId is string && data.adminId.size() <= 128 &&
+        data.action is string && data.action.size() <= 120 &&
+        data.targetUser is string && data.targetUser.size() <= 128 &&
+        data.amountOrStatus is string && data.amountOrStatus.size() <= 120 &&
+        data.details is string && data.details.size() <= 500 &&
+        isValidDateString(data.timestamp);
+    }
+
+    function isValidServerBugReport(data) {
+      return hasRequiredFields(['reportId', 'uid', 'username', 'description', 'featureArea', 'appVersion', 'status', 'reportedAt', 'serverRealm']) &&
+        hasOnlyAllowedFields(['reportId', 'uid', 'username', 'description', 'featureArea', 'appVersion', 'hasScreenshot', 'screenshotFileName', 'screenshotDataUrl', 'status', 'reportedAt', 'serverRealm']) &&
+        isValidServerRealm(data.serverRealm) &&
+        data.reportId is string && data.reportId.size() >= 2 && data.reportId.size() <= 128 &&
+        data.uid is string && data.uid.size() >= 2 && data.uid.size() <= 128 &&
+        data.username is string && data.username.size() <= 80 &&
+        data.description is string && data.description.size() >= 3 && data.description.size() <= 2500 &&
+        data.featureArea is string && data.featureArea.size() <= 120 &&
+        data.appVersion is string && data.appVersion.size() <= 80 &&
+        data.status in ['RECEIVED', 'REVIEWED'] &&
+        isValidDateString(data.reportedAt);
+    }
+
+    function isValidServerSession(data) {
+      return hasRequiredFields(['sessionId', 'uid', 'username', 'role', 'revoked', 'createdAt', 'expiresAt', 'updatedAt', 'serverRealm']) &&
+        hasOnlyAllowedFields(['sessionId', 'uid', 'username', 'role', 'revoked', 'createdAt', 'expiresAt', 'updatedAt', 'serverRealm']) &&
+        isValidServerRealm(data.serverRealm) &&
+        data.sessionId is string && data.sessionId.size() >= 8 && data.sessionId.size() <= 128 &&
+        data.uid is string && data.uid.size() >= 2 && data.uid.size() <= 128 &&
+        data.username is string && data.username.size() <= 80 &&
+        data.role in ['USER', 'ADMIN'] &&
+        data.revoked is bool &&
+        data.createdAt is number &&
+        data.expiresAt is number &&
+        isValidDateString(data.updatedAt);
+    }
+
+    function isValidServerDiamondChallenge(data) {
+      return hasRequiredFields(['challengeId', 'uid', 'question', 'expectedAnswer', 'rewardFire', 'consumed', 'createdAt', 'expiresAt', 'updatedAt', 'serverRealm']) &&
+        hasOnlyAllowedFields(['challengeId', 'uid', 'question', 'expectedAnswer', 'rewardFire', 'consumed', 'createdAt', 'expiresAt', 'updatedAt', 'serverRealm']) &&
+        isValidServerRealm(data.serverRealm) &&
+        data.challengeId is string && data.challengeId.size() >= 4 && data.challengeId.size() <= 128 &&
+        data.uid is string && data.uid.size() >= 2 && data.uid.size() <= 128 &&
+        data.question is string && data.question.size() <= 80 &&
+        data.expectedAnswer is number &&
+        data.rewardFire is number && data.rewardFire >= 0 && data.rewardFire <= 10 &&
+        data.consumed is bool &&
+        data.createdAt is number &&
+        data.expiresAt is number &&
+        isValidDateString(data.updatedAt);
+    }
+
+    function isValidServerSuspiciousTap(data) {
+      return hasRequiredFields(['eventId', 'uid', 'reason', 'deltaMs', 'tapId', 'status', 'createdAt', 'serverRealm']) &&
+        hasOnlyAllowedFields(['eventId', 'uid', 'username', 'reason', 'deltaMs', 'tapId', 'status', 'createdAt', 'serverRealm']) &&
+        isValidServerRealm(data.serverRealm) &&
+        data.eventId is string && data.eventId.size() >= 4 && data.eventId.size() <= 128 &&
+        data.uid is string && data.uid.size() >= 2 && data.uid.size() <= 128 &&
+        data.reason is string && data.reason.size() <= 300 &&
+        data.deltaMs is number && data.deltaMs >= 0 &&
+        data.tapId is string && data.tapId.size() <= 128 &&
+        data.status in ['FLAGGED', 'CLEARED', 'SUSPENDED'] &&
+        isValidDateString(data.createdAt);
+    }
+
+    function isValidServerConfigDoc(data) {
+      return hasRequiredFields(['docKey', 'updatedAt', 'serverRealm']) &&
+        isValidServerRealm(data.serverRealm) &&
+        data.docKey is string && data.docKey.size() >= 2 && data.docKey.size() <= 128 &&
+        isValidDateString(data.updatedAt);
+    }
+
+    // ===============================================================
+    // Collection Rules
+    // ===============================================================
+
+    match /users/{uid} {
+      allow read: if isAuthenticated();
+      allow create: if isOwner(uid) && isValidUserAccount(request.resource.data) &&
+        request.resource.data.uid == request.auth.uid &&
+        request.resource.data.dragonLevel == 1 &&
+        (request.resource.data.role == 'player' || isAdmin());
+      allow update: if isValidUserAccount(request.resource.data) && (
+        (isOwner(uid) &&
+         request.resource.data.uid == resource.data.uid &&
+         request.resource.data.role == resource.data.role &&
+         request.resource.data.status == resource.data.status &&
+         request.resource.data.dragonLevel == resource.data.dragonLevel &&
+         request.resource.data.createdAt == resource.data.createdAt) ||
+        isAdmin()
+      );
+      allow delete: if isAdmin();
+    }
+
+    match /user_profiles/{uid} {
+      allow read: if isOwner(uid) || isAdmin();
+      allow create: if isOwner(uid) && isValidUserProfile(request.resource.data) &&
+        request.resource.data.uid == request.auth.uid;
+      allow update: if (isOwner(uid) || isAdmin()) && isValidUserProfile(request.resource.data) &&
+        request.resource.data.uid == resource.data.uid;
+      allow delete: if isAdmin();
+    }
+
+    match /profiles/{uid} {
+      allow read: if isOwner(uid) || isAdmin();
+      allow create: if isOwner(uid) && isValidUserProfile(request.resource.data) &&
+        request.resource.data.uid == request.auth.uid;
+      allow update: if (isOwner(uid) || isAdmin()) && isValidUserProfile(request.resource.data) &&
+        request.resource.data.uid == resource.data.uid;
+      allow delete: if isAdmin();
+    }
+
+    match /user_wallets/{uid} {
+      allow read: if isOwner(uid) || isAdmin();
+      allow create: if isOwner(uid) && isValidUserWallet(request.resource.data) &&
+        request.resource.data.uid == request.auth.uid;
+      allow update: if (isOwner(uid) || isAdmin()) && isValidUserWallet(request.resource.data) &&
+        request.resource.data.uid == resource.data.uid;
+      allow delete: if isAdmin();
+    }
+
+    match /wallets/{uid} {
+      allow read: if isOwner(uid) || isAdmin();
+      allow create: if isOwner(uid) && isValidUserWallet(request.resource.data) &&
+        request.resource.data.uid == request.auth.uid;
+      allow update: if (isOwner(uid) || isAdmin()) && isValidUserWallet(request.resource.data) &&
+        request.resource.data.uid == resource.data.uid;
+      allow delete: if isAdmin();
+    }
+
+    match /transactions/{txId} {
+      allow read: if isAuthenticated() && (resource.data.uid == request.auth.uid || isAdmin());
+      allow create: if isAuthenticated() && isValidTransaction(request.resource.data) &&
+        (request.resource.data.uid == request.auth.uid || isAdmin());
+      allow update, delete: if isAdmin();
+    }
+
+    match /wallet_transactions/{txId} {
+      allow read: if isAuthenticated() && (resource.data.uid == request.auth.uid || isAdmin());
+      allow create: if isAuthenticated() && isValidTransaction(request.resource.data) &&
+        (request.resource.data.uid == request.auth.uid || isAdmin());
+      allow update, delete: if isAdmin();
+    }
+
+    match /level_upgrade_orders/{orderId} {
+      allow read: if isAuthenticated() && (resource.data.uid == request.auth.uid || isAdmin());
+      allow create: if isAuthenticated() && isValidLevelUpgradeOrder(request.resource.data) &&
+        request.resource.data.uid == request.auth.uid &&
+        request.resource.data.status in ['WAITING_PAYMENT', 'PENDING_VERIFICATION'];
+      allow update: if isValidLevelUpgradeOrder(request.resource.data) && (
+        isAdmin() ||
+        (isAuthenticated() &&
+         resource.data.uid == request.auth.uid &&
+         request.resource.data.uid == resource.data.uid &&
+         request.resource.data.targetLevel == resource.data.targetLevel &&
+         request.resource.data.priceIdr == resource.data.priceIdr &&
+         resource.data.status == 'WAITING_PAYMENT' &&
+         request.resource.data.status == 'PENDING_VERIFICATION')
+      );
+      allow delete: if isAdmin();
+    }
+
+    match /upgrade_orders/{orderId} {
+      allow read: if isAuthenticated() && (resource.data.uid == request.auth.uid || isAdmin());
+      allow create: if isAuthenticated() && isValidLevelUpgradeOrder(request.resource.data) &&
+        request.resource.data.uid == request.auth.uid &&
+        request.resource.data.status in ['WAITING_PAYMENT', 'PENDING_VERIFICATION'];
+      allow update: if isValidLevelUpgradeOrder(request.resource.data) && (
+        isAdmin() ||
+        (isAuthenticated() &&
+         resource.data.uid == request.auth.uid &&
+         request.resource.data.uid == resource.data.uid &&
+         request.resource.data.targetLevel == resource.data.targetLevel &&
+         request.resource.data.priceIdr == resource.data.priceIdr &&
+         resource.data.status == 'WAITING_PAYMENT' &&
+         request.resource.data.status == 'PENDING_VERIFICATION')
+      );
+      allow delete: if isAdmin();
+    }
+
+    match /tasks/{taskId} {
+      allow read: if isAuthenticated();
+      allow create: if isAdmin() || (isAuthenticated() && !exists(/databases/$(database)/documents/tasks/$(taskId)));
+      allow update, delete: if isAdmin();
+    }
+
+    match /task_claims/{claimId} {
+      allow read: if isAuthenticated() && (resource.data.uid == request.auth.uid || isAdmin());
+      allow create: if isAuthenticated() && request.resource.data.uid == request.auth.uid &&
+        hasRequiredFields(['claimId', 'uid', 'taskId', 'taskTitle', 'coinReward', 'fireReward', 'idrReward', 'claimedAt']) &&
+        isValidDateString(request.resource.data.claimedAt);
+      allow update, delete: if isAdmin();
+    }
+
+    match /reward_codes/{code} {
+      allow read: if isAuthenticated();
+      allow create, delete: if isAdmin();
+      allow update: if isAdmin() || (
+        isAuthenticated() &&
+        request.resource.data.code == resource.data.code &&
+        request.resource.data.coinReward == resource.data.coinReward &&
+        request.resource.data.fireReward == resource.data.fireReward &&
+        request.resource.data.idrReward == resource.data.idrReward &&
+        request.resource.data.maxClaims == resource.data.maxClaims &&
+        request.resource.data.isActive == resource.data.isActive &&
+        request.resource.data.claimedCount == resource.data.claimedCount + 1 &&
+        request.resource.data.claimedCount <= resource.data.maxClaims
+      );
+    }
+
+    match /reward_code_claims/{claimId} {
+      allow read: if isAuthenticated() && (resource.data.uid == request.auth.uid || isAdmin());
+      allow create: if isAuthenticated() && request.resource.data.uid == request.auth.uid &&
+        hasRequiredFields(['claimId', 'uid', 'code', 'coinReward', 'fireReward', 'idrReward', 'claimedAt']) &&
+        isValidDateString(request.resource.data.claimedAt);
+      allow update, delete: if isAdmin();
+    }
+
+    match /referrals/{referralId} {
+      allow read: if isAuthenticated() && (
+        resource.data.inviterUid == request.auth.uid ||
+        resource.data.inviteeUid == request.auth.uid ||
+        isAdmin()
+      );
+      allow create: if isAuthenticated() &&
+        (request.resource.data.inviteeUid == request.auth.uid || isAdmin()) &&
+        hasRequiredFields(['referralId', 'inviterUid', 'inviteeUid', 'inviteeUsername', 'status', 'rewardCoin', 'rewardFire', 'rewardIdr', 'createdAt', 'updatedAt']);
+      allow update, delete: if isAdmin();
+    }
+
+    match /creator_submissions/{submissionId} {
+      allow read: if isAuthenticated() && (resource.data.uid == request.auth.uid || isAdmin());
+      allow create: if isAuthenticated() && isValidCreatorSubmission(request.resource.data) &&
+        request.resource.data.uid == request.auth.uid &&
+        request.resource.data.status == 'PENDING';
+      allow update, delete: if isAdmin();
+    }
+
+    match /withdrawals/{withdrawalId} {
+      allow read: if isAuthenticated() && (resource.data.uid == request.auth.uid || isAdmin());
+      allow create: if isAuthenticated() && isValidWithdrawal(request.resource.data) &&
+        request.resource.data.uid == request.auth.uid &&
+        request.resource.data.status == 'PENDING';
+      allow update, delete: if isAdmin();
+    }
+
+    match /notifications/{notificationId} {
+      allow read: if isAuthenticated() && (resource.data.uid == request.auth.uid || isAdmin());
+      allow create: if isAuthenticated() && (request.resource.data.uid == request.auth.uid || isAdmin());
+      allow update: if isAuthenticated() && (
+        (resource.data.uid == request.auth.uid &&
+         request.resource.data.uid == resource.data.uid &&
+         request.resource.data.title == resource.data.title &&
+         request.resource.data.message == resource.data.message) ||
+        isAdmin()
+      );
+      allow delete: if isAdmin();
+    }
+
+    match /dragon_levels/{level} {
+      allow read: if isAuthenticated();
+      allow create: if isAdmin() || (isAuthenticated() && !exists(/databases/$(database)/documents/dragon_levels/$(level)));
+      allow update, delete: if isAdmin();
+    }
+
+    match /level_configs/{level} {
+      allow read: if isAuthenticated();
+      allow write: if isAdmin();
+    }
+
+    match /levels/{level} {
+      allow read: if isAuthenticated();
+      allow create: if isAdmin() || (isAuthenticated() && !exists(/databases/$(database)/documents/levels/$(level)));
+      allow update, delete: if isAdmin();
+    }
+
+    match /game_settings/{settingId} {
+      allow read: if isAuthenticated();
+      allow create: if isAdmin() || (isAuthenticated() && !exists(/databases/$(database)/documents/game_settings/$(settingId)));
+      allow update, delete: if isAdmin();
+    }
+
+    match /admin_audit_logs/{logId} {
+      allow read, write: if isAdmin();
+    }
+
+    match /server_user_accounts/{accountKey} {
+      allow get: if isValidDocId(accountKey);
+      allow list: if isValidServerRealm(resource.data.serverRealm);
+      allow create, update: if isValidDocId(accountKey) && isValidServerAccount(request.resource.data);
+      allow delete: if isValidDocId(accountKey);
+    }
+
+    match /server_user_states/{uid} {
+      allow get: if isValidDocId(uid);
+      allow list: if isValidServerRealm(resource.data.serverRealm);
+      allow create, update: if isValidDocId(uid) && isValidServerState(request.resource.data);
+      allow delete: if isValidDocId(uid);
+    }
+
+    match /server_referrals/{referralId} {
+      allow get: if isValidDocId(referralId);
+      allow list: if isValidServerRealm(resource.data.serverRealm);
+      allow create, update: if isValidDocId(referralId) && isValidServerReferral(request.resource.data);
+      allow delete: if isValidDocId(referralId);
+    }
+
+    match /server_transactions/{txId} {
+      allow get: if isValidDocId(txId);
+      allow list: if isValidServerRealm(resource.data.serverRealm);
+      allow create, update: if isValidDocId(txId) && isValidServerTransaction(request.resource.data);
+      allow delete: if isValidDocId(txId);
+    }
+
+    match /server_withdrawals/{withdrawalId} {
+      allow get: if isValidDocId(withdrawalId);
+      allow list: if isValidServerRealm(resource.data.serverRealm);
+      allow create, update: if isValidDocId(withdrawalId) && isValidServerWithdrawal(request.resource.data);
+      allow delete: if isValidDocId(withdrawalId);
+    }
+
+    match /server_upgrade_orders/{orderId} {
+      allow get: if isValidDocId(orderId);
+      allow list: if isValidServerRealm(resource.data.serverRealm);
+      allow create, update: if isValidDocId(orderId) && isValidServerRealm(request.resource.data.serverRealm);
+      allow delete: if isValidDocId(orderId);
+    }
+
+    match /server_creator_submissions/{submissionId} {
+      allow get: if isValidDocId(submissionId);
+      allow list: if isValidServerRealm(resource.data.serverRealm);
+      allow create, update: if isValidDocId(submissionId) && isValidServerRealm(request.resource.data.serverRealm);
+      allow delete: if isValidDocId(submissionId);
+    }
+
+    match /server_admin_audits/{auditId} {
+      allow get: if isValidDocId(auditId);
+      allow list: if isValidServerRealm(resource.data.serverRealm);
+      allow create, update: if isValidDocId(auditId) && isValidServerAdminAudit(request.resource.data);
+      allow delete: if isAdmin();
+    }
+
+    match /server_bug_reports/{reportId} {
+      allow get: if isValidDocId(reportId);
+      allow list: if isValidServerRealm(resource.data.serverRealm);
+      allow create, update: if isValidDocId(reportId) && isValidServerBugReport(request.resource.data);
+      allow delete: if isAdmin();
+    }
+
+    match /server_sessions/{sessionId} {
+      allow get: if isValidDocId(sessionId);
+      allow list: if isValidServerRealm(resource.data.serverRealm);
+      allow create, update: if isValidDocId(sessionId) && isValidServerSession(request.resource.data);
+      allow delete: if isAdmin();
+    }
+
+    match /server_diamond_challenges/{challengeId} {
+      allow get: if isValidDocId(challengeId);
+      allow list: if isValidServerRealm(resource.data.serverRealm);
+      allow create, update: if isValidDocId(challengeId) && isValidServerDiamondChallenge(request.resource.data);
+      allow delete: if isAdmin();
+    }
+
+    match /server_suspicious_taps/{eventId} {
+      allow get: if isValidDocId(eventId);
+      allow list: if isValidServerRealm(resource.data.serverRealm);
+      allow create, update: if isValidDocId(eventId) && isValidServerSuspiciousTap(request.resource.data);
+      allow delete: if isAdmin();
+    }
+
+    match /server_config/{docKey} {
+      allow get: if isValidDocId(docKey);
+      allow list: if isValidServerRealm(resource.data.serverRealm);
+      allow create, update: if isValidDocId(docKey) && isValidServerConfigDoc(request.resource.data);
+      allow delete: if isAdmin();
+    }
+
+    match /server_event_cooldowns/{docId} {
+      allow get: if isValidDocId(docId);
+      allow list: if isValidServerRealm(resource.data.serverRealm);
+      allow create, update: if isValidDocId(docId) && isValidServerRealm(request.resource.data.serverRealm);
+      allow delete: if isAdmin();
+    }
+
+    match /server_vip_orders/{orderId} {
+      allow get: if isValidDocId(orderId);
+      allow list: if isValidServerRealm(resource.data.serverRealm);
+      allow create, update: if isValidDocId(orderId) && isValidServerRealm(request.resource.data.serverRealm);
+      allow delete: if isAdmin();
+    }
+
+    match /server_broadcasts/{broadcastId} {
+      allow get: if isValidDocId(broadcastId);
+      allow list: if isValidServerRealm(resource.data.serverRealm);
+      allow create, update: if isValidDocId(broadcastId) && isValidServerRealm(request.resource.data.serverRealm);
+      allow delete: if isAdmin();
+    }
+
+    match /server_notifications/{notifId} {
+      allow get: if isValidDocId(notifId);
+      allow list: if isValidServerRealm(resource.data.serverRealm);
+      allow create, update: if isValidDocId(notifId) && isValidServerRealm(request.resource.data.serverRealm);
+      allow delete: if isAdmin();
+    }
+
+    match /server_task_claims/{claimId} {
+      allow get: if isValidDocId(claimId);
+      allow list: if isValidServerRealm(resource.data.serverRealm);
+      allow create, update: if isValidDocId(claimId) && isValidServerRealm(request.resource.data.serverRealm);
+      allow delete: if isAdmin();
+    }
+
+    match /server_telegram_links/{linkId} {
+      allow get: if isValidDocId(linkId);
+      allow list: if isValidServerRealm(resource.data.serverRealm);
+      allow create, update: if isValidDocId(linkId) && isValidServerRealm(request.resource.data.serverRealm);
+      allow delete: if isAdmin();
+    }
+
+    match /server_apk_installs/{installId} {
+      allow get: if isValidDocId(installId);
+      allow list: if isValidServerRealm(resource.data.serverRealm);
+      allow create, update: if isValidDocId(installId) && isValidServerRealm(request.resource.data.serverRealm);
+      allow delete: if isAdmin();
+    }
+  }
+}

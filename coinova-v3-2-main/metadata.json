@@ -1,0 +1,6 @@
+{
+  "name": "COINOVA - Cyber Reward Arena",
+  "description": "Platform reward interaktif COINOVA: kumpulkan Koin COINOVA, dapatkan Diamond, selesaikan misi harian, undang teman, dan tarik saldo ke E-Wallet.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

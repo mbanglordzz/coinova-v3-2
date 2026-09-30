@@ -1,0 +1,620 @@
+{
+  "entities": {
+    "UserAccount": {
+      "title": "UserAccount",
+      "description": "Public/general player profile and progression stats in COINOVA.",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "username": { "type": "string" },
+        "avatarUrl": { "type": "string" },
+        "referralCode": { "type": "string" },
+        "referredByUid": { "type": "string" },
+        "referredByCode": { "type": "string" },
+        "dragonLevel": { "type": "integer" },
+        "totalTaps": { "type": "integer" },
+        "dailyStreak": { "type": "integer" },
+        "lastCheckInDate": { "type": "string" },
+        "lastConvertDate": { "type": "string" },
+        "dailyConvertedFire": { "type": "integer" },
+        "cycleProgress": { "type": "integer" },
+        "dailyClaimsUsed": { "type": "integer" },
+        "lastClaimDate": { "type": "string" },
+        "role": { "type": "string", "enum": ["player", "admin"] },
+        "status": { "type": "string", "enum": ["active", "suspended"] },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["uid", "username", "referralCode", "dragonLevel", "totalTaps", "dailyStreak", "role", "status", "createdAt", "updatedAt"]
+    },
+    "UserProfile": {
+      "title": "UserProfile",
+      "description": "Private PII and e-wallet account details isolated per user.",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "email": { "type": "string", "format": "email" },
+        "fullName": { "type": "string" },
+        "phone": { "type": "string" },
+        "defaultEwallet": { "type": "string", "enum": ["DANA", "GoPay", "OVO", "ShopeePay"] },
+        "ewalletNumber": { "type": "string" },
+        "ewalletAccountName": { "type": "string" },
+        "pinHash": { "type": "string" },
+        "notificationsEnabled": { "type": "boolean" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["uid", "email", "defaultEwallet", "ewalletNumber", "ewalletAccountName", "notificationsEnabled", "updatedAt"]
+    },
+    "UserWallet": {
+      "title": "UserWallet",
+      "description": "User currency balances (COINOVA Coin, Diamond, IDR withdrawable balance, and Energy).",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "coinBalance": { "type": "number" },
+        "fireBalance": { "type": "number" },
+        "idrBalance": { "type": "number" },
+        "lockedIdrBalance": { "type": "number" },
+        "energy": { "type": "integer" },
+        "maxEnergy": { "type": "integer" },
+        "totalEarnedCoins": { "type": "number" },
+        "totalEarnedFire": { "type": "number" },
+        "totalWithdrawnIdr": { "type": "number" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["uid", "coinBalance", "fireBalance", "idrBalance", "lockedIdrBalance", "energy", "maxEnergy", "totalEarnedCoins", "totalEarnedFire", "totalWithdrawnIdr", "updatedAt"]
+    },
+    "WalletTransaction": {
+      "title": "WalletTransaction",
+      "description": "Immutable transaction ledger record for coins, fire, and IDR movements.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "uid": { "type": "string" },
+        "category": { "type": "string", "enum": ["PENDAPATAN", "KONVERSI", "TASK", "REFERRAL", "REWARD", "LEVEL", "WITHDRAWAL", "ADMIN"] },
+        "direction": { "type": "string", "enum": ["CREDIT", "DEBIT", "HOLD", "REFUND"] },
+        "currency": { "type": "string", "enum": ["COIN", "FIRE", "IDR"] },
+        "amount": { "type": "number" },
+        "description": { "type": "string" },
+        "referenceId": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "uid", "category", "direction", "currency", "amount", "description", "createdAt"]
+    },
+    "LevelUpgradeOrder": {
+      "title": "LevelUpgradeOrder",
+      "description": "Real-money Rupiah purchase order for upgrading Dragon Level.",
+      "type": "object",
+      "properties": {
+        "orderId": { "type": "string" },
+        "uid": { "type": "string" },
+        "username": { "type": "string" },
+        "targetLevel": { "type": "integer" },
+        "levelName": { "type": "string" },
+        "priceIdr": { "type": "number" },
+        "paymentMethod": { "type": "string", "enum": ["QRIS", "DANA", "GoPay", "OVO", "ShopeePay"] },
+        "paymentReference": { "type": "string" },
+        "status": { "type": "string", "enum": ["WAITING_PAYMENT", "PENDING_VERIFICATION", "PAID", "REJECTED"] },
+        "adminNote": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["orderId", "uid", "username", "targetLevel", "levelName", "priceIdr", "paymentMethod", "paymentReference", "status", "adminNote", "createdAt", "updatedAt"]
+    },
+    "GameTask": {
+      "title": "GameTask",
+      "description": "Daily, beginner, special, referral, and creator missions.",
+      "type": "object",
+      "properties": {
+        "taskId": { "type": "string" },
+        "title": { "type": "string" },
+        "description": { "type": "string" },
+        "category": { "type": "string", "enum": ["DAILY", "BEGINNER", "SPECIAL", "REFERRAL", "CREATOR"] },
+        "targetCount": { "type": "integer" },
+        "metricType": { "type": "string", "enum": ["TAPS", "CHECKIN", "LEVEL", "INVITES", "COINS_EARNED", "CREATOR_POST", "SHARE"] },
+        "coinReward": { "type": "number" },
+        "fireReward": { "type": "number" },
+        "idrReward": { "type": "number" },
+        "isActive": { "type": "boolean" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["taskId", "title", "description", "category", "targetCount", "metricType", "coinReward", "fireReward", "idrReward", "isActive", "updatedAt"]
+    },
+    "TaskClaim": {
+      "title": "TaskClaim",
+      "description": "Record of a user claiming a task reward.",
+      "type": "object",
+      "properties": {
+        "claimId": { "type": "string" },
+        "uid": { "type": "string" },
+        "taskId": { "type": "string" },
+        "taskTitle": { "type": "string" },
+        "coinReward": { "type": "number" },
+        "fireReward": { "type": "number" },
+        "idrReward": { "type": "number" },
+        "claimedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["claimId", "uid", "taskId", "taskTitle", "coinReward", "fireReward", "idrReward", "claimedAt"]
+    },
+    "RewardCode": {
+      "title": "RewardCode",
+      "description": "Redeemable gift codes created by admins.",
+      "type": "object",
+      "properties": {
+        "code": { "type": "string" },
+        "description": { "type": "string" },
+        "coinReward": { "type": "number" },
+        "fireReward": { "type": "number" },
+        "idrReward": { "type": "number" },
+        "maxClaims": { "type": "integer" },
+        "claimedCount": { "type": "integer" },
+        "isActive": { "type": "boolean" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["code", "description", "coinReward", "fireReward", "idrReward", "maxClaims", "claimedCount", "isActive", "updatedAt"]
+    },
+    "RewardCodeClaim": {
+      "title": "RewardCodeClaim",
+      "description": "Record of a user redeeming a gift code.",
+      "type": "object",
+      "properties": {
+        "claimId": { "type": "string" },
+        "uid": { "type": "string" },
+        "code": { "type": "string" },
+        "coinReward": { "type": "number" },
+        "fireReward": { "type": "number" },
+        "idrReward": { "type": "number" },
+        "claimedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["claimId", "uid", "code", "coinReward", "fireReward", "idrReward", "claimedAt"]
+    },
+    "ReferralRecord": {
+      "title": "ReferralRecord",
+      "description": "Tracks inviter and invitee relationship and bonus status.",
+      "type": "object",
+      "properties": {
+        "referralId": { "type": "string" },
+        "inviterUid": { "type": "string" },
+        "inviteeUid": { "type": "string" },
+        "inviteeUsername": { "type": "string" },
+        "status": { "type": "string", "enum": ["PENDING", "VERIFIED"] },
+        "rewardCoin": { "type": "number" },
+        "rewardFire": { "type": "number" },
+        "rewardIdr": { "type": "number" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["referralId", "inviterUid", "inviteeUid", "inviteeUsername", "status", "rewardCoin", "rewardFire", "rewardIdr", "createdAt", "updatedAt"]
+    },
+    "CreatorSubmission": {
+      "title": "CreatorSubmission",
+      "description": "Social media video/post submission by players for creator rewards.",
+      "type": "object",
+      "properties": {
+        "submissionId": { "type": "string" },
+        "uid": { "type": "string" },
+        "username": { "type": "string" },
+        "platform": { "type": "string", "enum": ["TikTok", "YouTube", "Instagram", "Facebook"] },
+        "contentUrl": { "type": "string" },
+        "caption": { "type": "string" },
+        "status": { "type": "string", "enum": ["PENDING", "APPROVED", "REJECTED"] },
+        "rewardCoin": { "type": "number" },
+        "rewardFire": { "type": "number" },
+        "rewardIdr": { "type": "number" },
+        "adminNote": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["submissionId", "uid", "username", "platform", "contentUrl", "status", "rewardCoin", "rewardFire", "rewardIdr", "createdAt", "updatedAt"]
+    },
+    "WithdrawalRecord": {
+      "title": "WithdrawalRecord",
+      "description": "Manual e-wallet withdrawal request and audit trail.",
+      "type": "object",
+      "properties": {
+        "withdrawalId": { "type": "string" },
+        "uid": { "type": "string" },
+        "username": { "type": "string" },
+        "method": { "type": "string", "enum": ["DANA", "GoPay", "OVO", "ShopeePay"] },
+        "accountNumber": { "type": "string" },
+        "accountName": { "type": "string" },
+        "amount": { "type": "number" },
+        "status": { "type": "string", "enum": ["PENDING", "PROCESSING", "PAID", "REJECTED"] },
+        "paymentReference": { "type": "string" },
+        "adminNote": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["withdrawalId", "uid", "username", "method", "accountNumber", "accountName", "amount", "status", "createdAt", "updatedAt"]
+    },
+    "NotificationItem": {
+      "title": "NotificationItem",
+      "description": "In-app notification message for a user.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "uid": { "type": "string" },
+        "title": { "type": "string" },
+        "message": { "type": "string" },
+        "type": { "type": "string", "enum": ["INFO", "SUCCESS", "WARNING", "REWARD"] },
+        "isRead": { "type": "boolean" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "uid", "title", "message", "type", "isRead", "createdAt", "updatedAt"]
+    },
+    "DragonLevelConfig": {
+      "title": "DragonLevelConfig",
+      "description": "Configuration for each Dragon Level (1-5).",
+      "type": "object",
+      "properties": {
+        "level": { "type": "integer" },
+        "name": { "type": "string" },
+        "titleBadge": { "type": "string" },
+        "priceIdr": { "type": "number" },
+        "requiredCoins": { "type": "number" },
+        "requiredFire": { "type": "number" },
+        "tapMultiplier": { "type": "number" },
+        "maxEnergy": { "type": "integer" },
+        "dailyFireBonus": { "type": "number" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["level", "name", "titleBadge", "priceIdr", "requiredCoins", "requiredFire", "tapMultiplier", "maxEnergy", "dailyFireBonus", "updatedAt"]
+    },
+    "GameSettings": {
+      "title": "GameSettings",
+      "description": "Global economy rates, tap rewards, and withdrawal limits.",
+      "type": "object",
+      "properties": {
+        "settingId": { "type": "string" },
+        "coinsPerTap": { "type": "number" },
+        "energyCostPerTap": { "type": "integer" },
+        "baseMaxEnergy": { "type": "integer" },
+        "energyRegenPerMinute": { "type": "integer" },
+        "coinToIdrRate": { "type": "number" },
+        "fireToIdrRate": { "type": "number" },
+        "referralRewardCoin": { "type": "number" },
+        "referralRewardFire": { "type": "number" },
+        "referralRewardIdr": { "type": "number" },
+        "minWithdrawIdr": { "type": "number" },
+        "maintenanceMode": { "type": "boolean" },
+        "announcementText": { "type": "string" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["settingId", "coinsPerTap", "energyCostPerTap", "baseMaxEnergy", "energyRegenPerMinute", "coinToIdrRate", "fireToIdrRate", "referralRewardCoin", "referralRewardFire", "referralRewardIdr", "minWithdrawIdr", "maintenanceMode", "announcementText", "updatedAt"]
+    },
+    "AdminAuditLog": {
+      "title": "AdminAuditLog",
+      "description": "Audit log of admin actions on withdrawals, users, and settings.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "adminUid": { "type": "string" },
+        "adminEmail": { "type": "string" },
+        "action": { "type": "string" },
+        "targetId": { "type": "string" },
+        "details": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "adminUid", "adminEmail", "action", "targetId", "details", "createdAt"]
+    },
+    "ServerUserAccount": {
+      "title": "ServerUserAccount",
+      "description": "Server-side persistent user account record with salted password hash.",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "username": { "type": "string", "minLength": 2, "maxLength": 64 },
+        "usernameLower": { "type": "string", "minLength": 2, "maxLength": 64 },
+        "email": { "type": "string", "maxLength": 160 },
+        "passwordHash": { "type": "string", "minLength": 32, "maxLength": 128 },
+        "referralCode": { "type": "string", "minLength": 4, "maxLength": 32 },
+        "referredByCode": { "type": "string", "maxLength": 32 },
+        "referredByUid": { "type": "string", "maxLength": 128 },
+        "dragonLevel": { "type": "integer" },
+        "status": { "type": "string", "enum": ["active", "suspended"] },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" },
+        "serverRealm": { "type": "string" }
+      },
+      "required": ["uid", "username", "usernameLower", "passwordHash", "referralCode", "dragonLevel", "createdAt", "updatedAt", "serverRealm"]
+    },
+    "ServerUserState": {
+      "title": "ServerUserState",
+      "description": "Server-authoritative player balances, energy, and daily counters.",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "username": { "type": "string", "maxLength": 64 },
+        "dragonLevel": { "type": "integer" },
+        "coinBalance": { "type": "number" },
+        "fireBalance": { "type": "number" },
+        "lockedIdrBalance": { "type": "number" },
+        "energy": { "type": "integer" },
+        "maxEnergy": { "type": "integer" },
+        "lastEnergyRegenMs": { "type": "number" },
+        "cycleProgress": { "type": "integer" },
+        "dailyClaimsUsed": { "type": "integer" },
+        "lastClaimDate": { "type": "string", "maxLength": 32 },
+        "lastConvertDate": { "type": "string", "maxLength": 32 },
+        "dailyConvertedFire": { "type": "number" },
+        "totalTaps": { "type": "integer" },
+        "boundReferralCode": { "type": "string", "maxLength": 32 },
+        "vipStatus": { "type": "string", "enum": ["NONE", "PENDING", "ACTIVE", "EXPIRED"] },
+        "vipStartedAt": { "type": "string", "format": "date-time" },
+        "vipExpiresAt": { "type": "string", "format": "date-time" },
+        "lastMysteryBoxClaimMs": { "type": "number" },
+        "lastMysteryBoxClaimAt": { "type": "string", "format": "date-time" },
+        "lastLuckySpinMs": { "type": "number" },
+        "lastLuckySpinAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" },
+        "serverRealm": { "type": "string" }
+      },
+      "required": ["uid", "dragonLevel", "coinBalance", "fireBalance", "lockedIdrBalance", "energy", "maxEnergy", "lastEnergyRegenMs", "dailyClaimsUsed", "lastClaimDate", "lastConvertDate", "dailyConvertedFire", "totalTaps", "updatedAt", "serverRealm"]
+    },
+    "ServerReferral": {
+      "title": "ServerReferral",
+      "description": "Server-side referral milestone state.",
+      "type": "object",
+      "properties": {
+        "referralId": { "type": "string", "maxLength": 128 },
+        "inviterUid": { "type": "string", "maxLength": 128 },
+        "inviteeUid": { "type": "string", "maxLength": 128 },
+        "status": { "type": "string", "enum": ["PENDING", "ACTIVE", "VERIFIED", "REJECTED"] },
+        "activeRewardClaimed": { "type": "boolean" },
+        "topupRewardClaimed": { "type": "boolean" },
+        "upgradeRewardClaimed": { "type": "boolean" },
+        "updatedAt": { "type": "string", "format": "date-time" },
+        "serverRealm": { "type": "string" }
+      },
+      "required": ["referralId", "inviterUid", "inviteeUid", "status", "activeRewardClaimed", "topupRewardClaimed", "updatedAt", "serverRealm"]
+    },
+    "ServerTransaction": {
+      "title": "ServerTransaction",
+      "description": "Server-side ledger transaction entry.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "uid": { "type": "string", "maxLength": 128 },
+        "category": { "type": "string", "maxLength": 64 },
+        "direction": { "type": "string", "enum": ["CREDIT", "DEBIT", "HOLD", "REFUND"] },
+        "currency": { "type": "string", "enum": ["COIN", "FIRE"] },
+        "amount": { "type": "number" },
+        "description": { "type": "string", "maxLength": 500 },
+        "referenceId": { "type": "string", "maxLength": 128 },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "serverRealm": { "type": "string" }
+      },
+      "required": ["id", "uid", "category", "direction", "currency", "amount", "description", "referenceId", "createdAt", "serverRealm"]
+    },
+    "ServerWithdrawal": {
+      "title": "ServerWithdrawal",
+      "description": "Server-side validated withdrawal request.",
+      "type": "object",
+      "properties": {
+        "withdrawalId": { "type": "string", "maxLength": 128 },
+        "uid": { "type": "string", "maxLength": 128 },
+        "username": { "type": "string", "maxLength": 80 },
+        "method": { "type": "string", "enum": ["DANA", "GoPay", "OVO", "ShopeePay"] },
+        "accountNumber": { "type": "string", "maxLength": 40 },
+        "accountName": { "type": "string", "maxLength": 100 },
+        "amount": { "type": "number" },
+        "coinDeducted": { "type": "number" },
+        "fireDeducted": { "type": "number" },
+        "status": { "type": "string", "enum": ["PENDING", "PROCESSING", "PAID", "REJECTED"] },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" },
+        "serverRealm": { "type": "string" }
+      },
+      "required": ["withdrawalId", "uid", "method", "accountNumber", "accountName", "amount", "status", "createdAt", "updatedAt", "serverRealm"]
+    },
+    "ServerAdminAudit": {
+      "title": "ServerAdminAudit",
+      "description": "Server-side admin audit entry.",
+      "type": "object",
+      "properties": {
+        "auditId": { "type": "string", "maxLength": 128 },
+        "adminId": { "type": "string", "maxLength": 128 },
+        "timestamp": { "type": "string", "format": "date-time" },
+        "action": { "type": "string", "maxLength": 120 },
+        "targetUser": { "type": "string", "maxLength": 128 },
+        "amountOrStatus": { "type": "string", "maxLength": 120 },
+        "details": { "type": "string", "maxLength": 500 },
+        "serverRealm": { "type": "string" }
+      },
+      "required": ["auditId", "adminId", "timestamp", "action", "targetUser", "amountOrStatus", "details", "serverRealm"]
+    },
+    "ServerBugReport": {
+      "title": "ServerBugReport",
+      "description": "Server-side player bug report.",
+      "type": "object",
+      "properties": {
+        "reportId": { "type": "string", "maxLength": 128 },
+        "uid": { "type": "string", "maxLength": 128 },
+        "username": { "type": "string", "maxLength": 80 },
+        "description": { "type": "string", "maxLength": 2500 },
+        "featureArea": { "type": "string", "maxLength": 120 },
+        "appVersion": { "type": "string", "maxLength": 80 },
+        "hasScreenshot": { "type": "boolean" },
+        "screenshotFileName": { "type": "string", "maxLength": 160 },
+        "screenshotDataUrl": { "type": "string", "maxLength": 600000 },
+        "status": { "type": "string", "enum": ["RECEIVED", "REVIEWED"] },
+        "reportedAt": { "type": "string", "format": "date-time" },
+        "serverRealm": { "type": "string" }
+      },
+      "required": ["reportId", "uid", "username", "description", "featureArea", "appVersion", "status", "reportedAt", "serverRealm"]
+    },
+    "ServerSession": {
+      "title": "ServerSession",
+      "description": "Persistent session and token revocation state.",
+      "type": "object",
+      "properties": {
+        "sessionId": { "type": "string", "maxLength": 128 },
+        "uid": { "type": "string", "maxLength": 128 },
+        "username": { "type": "string", "maxLength": 80 },
+        "role": { "type": "string", "enum": ["USER", "ADMIN"] },
+        "revoked": { "type": "boolean" },
+        "createdAt": { "type": "number" },
+        "expiresAt": { "type": "number" },
+        "updatedAt": { "type": "string", "format": "date-time" },
+        "serverRealm": { "type": "string" }
+      },
+      "required": ["sessionId", "uid", "username", "role", "revoked", "createdAt", "expiresAt", "updatedAt", "serverRealm"]
+    },
+    "ServerDiamondChallenge": {
+      "title": "ServerDiamondChallenge",
+      "description": "Server-validated math challenge for Diamond drop.",
+      "type": "object",
+      "properties": {
+        "challengeId": { "type": "string", "maxLength": 128 },
+        "uid": { "type": "string", "maxLength": 128 },
+        "question": { "type": "string", "maxLength": 80 },
+        "expectedAnswer": { "type": "number" },
+        "rewardFire": { "type": "number" },
+        "consumed": { "type": "boolean" },
+        "createdAt": { "type": "number" },
+        "expiresAt": { "type": "number" },
+        "updatedAt": { "type": "string", "format": "date-time" },
+        "serverRealm": { "type": "string" }
+      },
+      "required": ["challengeId", "uid", "question", "expectedAnswer", "rewardFire", "consumed", "createdAt", "expiresAt", "updatedAt", "serverRealm"]
+    },
+    "ServerSuspiciousTap": {
+      "title": "ServerSuspiciousTap",
+      "description": "Server-side suspicious tap anti-fraud record.",
+      "type": "object",
+      "properties": {
+        "eventId": { "type": "string", "maxLength": 128 },
+        "uid": { "type": "string", "maxLength": 128 },
+        "reason": { "type": "string", "maxLength": 300 },
+        "deltaMs": { "type": "number" },
+        "tapId": { "type": "string", "maxLength": 128 },
+        "status": { "type": "string", "enum": ["FLAGGED", "CLEARED", "SUSPENDED"] },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "serverRealm": { "type": "string" }
+      },
+      "required": ["eventId", "uid", "reason", "deltaMs", "tapId", "status", "createdAt", "serverRealm"]
+    },
+    "ServerConfigDoc": {
+      "title": "ServerConfigDoc",
+      "description": "Server-side configuration and metadata document.",
+      "type": "object",
+      "properties": {
+        "docKey": { "type": "string", "maxLength": 128 },
+        "updatedAt": { "type": "string", "format": "date-time" },
+        "serverRealm": { "type": "string" }
+      },
+      "required": ["docKey", "updatedAt", "serverRealm"]
+    }
+  },
+  "firestore": {
+    "/users/{uid}": {
+      "schema": { "$ref": "#/entities/UserAccount" },
+      "description": "Player account and progression documents."
+    },
+    "/user_profiles/{uid}": {
+      "schema": { "$ref": "#/entities/UserProfile" },
+      "description": "Private PII and e-wallet details per user."
+    },
+    "/wallets/{uid}": {
+      "schema": { "$ref": "#/entities/UserWallet" },
+      "description": "Player wallet balances and energy."
+    },
+    "/transactions/{txId}": {
+      "schema": { "$ref": "#/entities/WalletTransaction" },
+      "description": "Wallet transaction ledger."
+    },
+    "/upgrade_orders/{orderId}": {
+      "schema": { "$ref": "#/entities/LevelUpgradeOrder" },
+      "description": "Real-money Rupiah upgrade orders."
+    },
+    "/tasks/{taskId}": {
+      "schema": { "$ref": "#/entities/GameTask" },
+      "description": "Configured game missions."
+    },
+    "/task_claims/{claimId}": {
+      "schema": { "$ref": "#/entities/TaskClaim" },
+      "description": "Player task claim records."
+    },
+    "/reward_codes/{code}": {
+      "schema": { "$ref": "#/entities/RewardCode" },
+      "description": "Redeemable reward codes."
+    },
+    "/reward_code_claims/{claimId}": {
+      "schema": { "$ref": "#/entities/RewardCodeClaim" },
+      "description": "Player reward code redemption records."
+    },
+    "/referrals/{referralId}": {
+      "schema": { "$ref": "#/entities/ReferralRecord" },
+      "description": "Referral tracking records."
+    },
+    "/creator_submissions/{submissionId}": {
+      "schema": { "$ref": "#/entities/CreatorSubmission" },
+      "description": "Creator mission post submissions."
+    },
+    "/withdrawals/{withdrawalId}": {
+      "schema": { "$ref": "#/entities/WithdrawalRecord" },
+      "description": "Manual withdrawal requests."
+    },
+    "/notifications/{notificationId}": {
+      "schema": { "$ref": "#/entities/NotificationItem" },
+      "description": "In-app notifications."
+    },
+    "/level_configs/{level}": {
+      "schema": { "$ref": "#/entities/DragonLevelConfig" },
+      "description": "Dragon level configuration table."
+    },
+    "/game_settings/{settingId}": {
+      "schema": { "$ref": "#/entities/GameSettings" },
+      "description": "Global game economy settings."
+    },
+    "/admin_audit_logs/{logId}": {
+      "schema": { "$ref": "#/entities/AdminAuditLog" },
+      "description": "Admin action audit trail."
+    },
+    "/server_user_accounts/{accountKey}": {
+      "schema": { "$ref": "#/entities/ServerUserAccount" },
+      "description": "Server-side persistent user accounts and password hashes."
+    },
+    "/server_user_states/{uid}": {
+      "schema": { "$ref": "#/entities/ServerUserState" },
+      "description": "Server-side persistent user balances and energy state."
+    },
+    "/server_referrals/{referralId}": {
+      "schema": { "$ref": "#/entities/ServerReferral" },
+      "description": "Server-side persistent referral milestones."
+    },
+    "/server_transactions/{txId}": {
+      "schema": { "$ref": "#/entities/ServerTransaction" },
+      "description": "Server-side persistent transaction ledger."
+    },
+    "/server_withdrawals/{withdrawalId}": {
+      "schema": { "$ref": "#/entities/ServerWithdrawal" },
+      "description": "Server-side persistent withdrawal requests."
+    },
+    "/server_admin_audits/{auditId}": {
+      "schema": { "$ref": "#/entities/ServerAdminAudit" },
+      "description": "Server-side persistent admin audit trail."
+    },
+    "/server_bug_reports/{reportId}": {
+      "schema": { "$ref": "#/entities/ServerBugReport" },
+      "description": "Server-side persistent bug reports."
+    },
+    "/server_sessions/{sessionId}": {
+      "schema": { "$ref": "#/entities/ServerSession" },
+      "description": "Server-side persistent session & token state."
+    },
+    "/server_diamond_challenges/{challengeId}": {
+      "schema": { "$ref": "#/entities/ServerDiamondChallenge" },
+      "description": "Server-side persistent diamond math challenges."
+    },
+    "/server_suspicious_taps/{eventId}": {
+      "schema": { "$ref": "#/entities/ServerSuspiciousTap" },
+      "description": "Server-side persistent suspicious tap events."
+    },
+    "/server_config/{docKey}": {
+      "schema": { "$ref": "#/entities/ServerConfigDoc" },
+      "description": "Server-side persistent economy and auth config."
+    }
+  }
+}

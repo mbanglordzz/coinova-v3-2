@@ -1,0 +1,27 @@
+# ============================================================================
+# COINOVA — CLOUDFLARE PAGES / WORKERS + D1 CONFIGURATION
+# ============================================================================
+name = "coinova-app"
+compatibility_date = "2025-03-01"
+pages_build_output_dir = "dist"
+
+# If deploying as a standalone Cloudflare Worker (npx wrangler deploy --config wrangler.worker.toml or uncomment `main` below):
+# main = "worker/index.ts"
+
+# ============================================================================
+# CLOUDFLARE D1 DATABASE BINDING
+# ============================================================================
+# 1. Buat database D1:
+#    npx wrangler d1 create coinova-db
+# 2. Ganti `database_id` di bawah dengan ID yang dihasilkan oleh perintah di atas.
+# 3. Jalankan migrasi:
+#    npx wrangler d1 execute coinova-db --local --file=./migrations/0001_coinova_d1_schema.sql
+#    npx wrangler d1 execute coinova-db --remote --file=./migrations/0001_coinova_d1_schema.sql
+[[d1_databases]]
+binding = "DB"
+database_name = "coinova-db"
+database_id = "00000000-0000-0000-0000-000000000000"
+migrations_dir = "migrations"
+
+[vars]
+CORS_ORIGIN = "*"

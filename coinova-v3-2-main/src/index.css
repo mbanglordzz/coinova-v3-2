@@ -1,0 +1,136 @@
+@import "tailwindcss";
+
+@layer base {
+  :root {
+    --font-sans: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+    --font-display: 'Poppins', sans-serif;
+    --font-mono: 'JetBrains Mono', monospace;
+  }
+
+  * {
+    box-sizing: border-box;
+    -webkit-tap-highlight-color: transparent;
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+  }
+
+  *::-webkit-scrollbar {
+    display: none;
+    width: 0;
+    height: 0;
+  }
+
+  html,
+  body {
+    margin: 0;
+    padding: 0;
+    width: 100%;
+    height: 100%;
+    overflow-x: hidden;
+    background-color: #050507;
+    color: #ffffff;
+    font-family: var(--font-sans);
+  }
+}
+
+.font-display {
+  font-family: var(--font-display);
+}
+
+.font-mono-num {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+/* COINOVA Futuristic HUD & Glass Utilities — DARK BLACK + NEON HIGHLIGHTER YELLOW */
+.coinova-hud-bg {
+  background-color: #060608;
+  background-image:
+    radial-gradient(circle at 50% 0%, rgba(250, 204, 21, 0.16) 0%, transparent 55%),
+    radial-gradient(circle at 85% 30%, rgba(255, 234, 0, 0.08) 0%, transparent 45%),
+    linear-gradient(rgba(250, 204, 21, 0.035) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(250, 204, 21, 0.035) 1px, transparent 1px);
+  background-size: 100% 100%, 100% 100%, 28px 28px, 28px 28px;
+}
+
+.coinova-card {
+  background: linear-gradient(165deg, rgba(20, 20, 24, 0.94) 0%, rgba(10, 10, 13, 0.97) 100%);
+  border: 1px solid rgba(250, 204, 21, 0.28);
+  box-shadow:
+    0 10px 30px -10px rgba(0, 0, 0, 0.85),
+    inset 0 1px 0 0 rgba(253, 224, 71, 0.16);
+}
+
+.coinova-card-glow {
+  background: linear-gradient(155deg, rgba(28, 26, 16, 0.95) 0%, rgba(11, 11, 14, 0.98) 100%);
+  border: 1px solid rgba(255, 234, 0, 0.48);
+  box-shadow:
+    0 0 28px rgba(250, 204, 21, 0.16),
+    inset 0 1px 0 0 rgba(254, 240, 138, 0.28);
+}
+
+.dragon-card {
+  background: linear-gradient(165deg, rgba(20, 20, 24, 0.94) 0%, rgba(10, 10, 13, 0.97) 100%);
+  border: 1px solid rgba(250, 204, 21, 0.24);
+}
+
+.dragon-neon-card {
+  background: linear-gradient(155deg, rgba(26, 24, 15, 0.96) 0%, rgba(10, 10, 13, 0.98) 100%);
+  border: 1px solid rgba(255, 234, 0, 0.45);
+  box-shadow: 0 0 28px rgba(250, 204, 21, 0.16);
+}
+
+@keyframes coinovaFloatUp {
+  0% {
+    opacity: 1;
+    transform: translate3d(-50%, 0, 0) scale3d(0.92, 0.92, 1);
+  }
+  100% {
+    opacity: 0;
+    transform: translate3d(-50%, -62px, 0) scale3d(1.08, 1.08, 1);
+  }
+}
+
+.animate-coin-float {
+  will-change: transform, opacity;
+  backface-visibility: hidden;
+  animation: coinovaFloatUp 0.56s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+@keyframes coinovaCorePulse {
+  0%,
+  100% {
+    transform: translate3d(0, 0, 0) scale3d(1, 1, 1);
+  }
+  50% {
+    transform: translate3d(0, -3px, 0) scale3d(1.015, 1.015, 1);
+  }
+}
+
+.animate-core-idle {
+  will-change: transform;
+  backface-visibility: hidden;
+  animation: coinovaCorePulse 3.2s ease-in-out infinite;
+}
+
+@keyframes spinSlow {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.animate-spin-slow {
+  animation: spinSlow 18s linear infinite;
+}
